@@ -101,15 +101,13 @@ log 'Setting up bash profiles...'
 ln -sf /opt/djevops/conf/.bash_profile .
 ln -sf /opt/djevops/conf/.bash_profile /home/django
 
-if [ -f /srv/app/conf/django.bashrc ]; then
-  /usr/bin/envsubst < /srv/app/conf/django.bashrc > /home/django/.bashrc
-else
-  touch /home/django/.bashrc
-fi
-echo "export HOST_NAME=$HOST_NAME" >> /home/django/.bashrc
+echo "export HOST_NAME=$HOST_NAME" > /home/django/.bashrc
 echo 'export SQLITE_DB_FILE=/var/lib/django/db.sqlite3' >> /home/django/.bashrc
 echo 'export STATIC_ROOT=/srv/static' >> /home/django/.bashrc
 echo 'export PATH="/srv/venv/bin:$PATH"' >> /home/django/.bashrc
+if [ -f /srv/app/conf/django.bashrc ]; then
+  /usr/bin/envsubst < /srv/app/conf/django.bashrc >> /home/django/.bashrc
+fi
 chown django:django /home/django/.bashrc
 
 log 'Creating data directory...'
@@ -138,12 +136,13 @@ if [ -n "$SMTP_HOST" ]; then
 
   log 'Configuring Postfix...'
   # The SMTP_USER credentials can for example be created in the AWS SES console
-  # under "SMTP settings" with button "Create SMTP credentials".
+  # under "SMTP settings" with button "Create SMTP credentials". (Be sure to do
+  # this in the correct AWS region!)
   echo "$HOST_NAME" > /etc/mailname
   chown postfix /etc/mailname
   envsubst '$SMTP_HOST $HOST_NAME' < /opt/djevops/conf/postfix/main.cf > /etc/postfix/main.cf
   envsubst < /opt/djevops/conf/postfix/sasl_passwd > /etc/postfix/sasl_passwd
-  rm -f /etc/postfix/sasl_passwd.db
+  chown postfix /etc/postfix
   postmap /etc/postfix/sasl_passwd
   chmod 400 /etc/postfix/sasl_passwd
   chown postfix /etc/postfix/sasl_passwd
