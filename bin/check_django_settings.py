@@ -10,6 +10,7 @@ def main():
     check_databases()
     check_staticfiles()
     check_allowed_hosts()
+    check_celery()
 
 def check_gunicorn():
     try:
@@ -60,6 +61,19 @@ def check_allowed_hosts():
             "        ALLOWED_HOSTS.append(os.getenv('HOST_NAME'))"
         )
 
+def check_celery():
+    try:
+        import celery
+    except ImportError:
+        # Doesn't use Celery, so no need to check its configuration.
+        return
+    if getattr(settings, 'CELERY_BROKER_URL') != 'redis://localhost':
+        error(
+            "Please set Django setting CELERY_BROKER_URL to redis://localhost. "
+            "If you have a different BROKER_URL setting, please change your "
+            "Celery app's namespace to CELERY."
+        )
+
 def is_writeable(path: Path):
     if path.exists():
         return os.access(path, os.W_OK)
@@ -75,5 +89,3 @@ def is_writeable(path: Path):
 def error(message):
     print(message)
     sys.exit(1)
-
-main()

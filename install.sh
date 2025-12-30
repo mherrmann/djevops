@@ -88,7 +88,8 @@ if [ -n "$GIT_REPO_PUBKEY" ]; then
 fi
 
 log 'Adding git repository server to known hosts...'
-ssh-keyscan -H ${GIT_SERVER} >> .ssh/known_hosts 2>/dev/null; chmod 600 .ssh/known_hosts
+ssh-keyscan -H ${GIT_SERVER} >> .ssh/known_hosts 2>/dev/null
+chmod 600 .ssh/known_hosts
 
 log 'Cloning the repository...'
 git clone -q -b ${GIT_REPO_BRANCH} ${GIT_REPO_URL} /srv/app
@@ -165,8 +166,19 @@ python3 -m venv /srv/venv > /dev/null
 log 'Installing Python dependencies...'
 /opt/djevops/bin/install-python-deps.sh
 
+if /srv/venv/bin/python -c "import celery" &>/dev/null; then
+  USES_CELERY=true
+else
+  USES_CELERY=false
+fi
+
 log 'Checking Django settings...'
-su -c "/opt/djevops/bin/manage.sh shell --pythonpath /opt/djevops/bin -c 'import check_django_settings' -v 0" - django
+su -c "/opt/djevops/bin/manage.sh shell --pythonpath /opt/djevops/bin -c 'from check_django_settings import main; main()' -v 0" - django
+
+if $USES_CELERY; then
+  log 'Celery detected. Installing Redis...'
+  apt-get install redis-server -y > /dev/null
+fi
 
 log 'Migrating database...'
 /opt/djevops/bin/migrate-db.sh
@@ -182,6 +194,11 @@ apt-get install supervisor -y > /dev/null
 
 log 'Configuring Supervisor...'
 ln -s /opt/djevops/conf/supervisor/gunicorn.conf /etc/supervisor/conf.d
+
+if $USES_CELERY; then
+  ln -s /opt/djevops/conf/supervisor/beat.conf /etc/supervisor/conf.d
+  ln -s /opt/djevops/conf/supervisor/worker.conf /etc/supervisor/conf.d
+fi
 
 log 'Starting services...'
 supervisorctl reread > /dev/null

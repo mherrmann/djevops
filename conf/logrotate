@@ -27,3 +27,18 @@
         kill -USR2 `cat /run/supervisord.pid`
     endscript
 }
+
+/var/log/beat.log
+/var/log/worker.log {
+    su root django
+    create 0640 root django
+    missingok
+    rotate 14
+    size 100M
+    compress
+    delaycompress
+    notifempty
+    postrotate
+        kill -USR2 `cat /run/supervisord.pid`
+    endscript
+}
