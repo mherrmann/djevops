@@ -237,13 +237,11 @@ log "The server is now serving requests at $HOST_NAME!"
 log 'Setting up logrotate...'
 ln -s /opt/djevops/conf/logrotate /etc/logrotate.d/django
 
-if [ -f /opt/djevops/conf/crontab ]; then
-  log 'Setting up crontab...'
-  ln -s /opt/djevops/bin/cronic /usr/bin/cronic
-  sed "s/\$ADMIN_EMAIL/$ADMIN_EMAIL/g" /opt/djevops/conf/crontab > crontab
-  crontab crontab
-  rm crontab
-fi
+log 'Setting up crontab...'
+ln -s /opt/djevops/bin/cronic /usr/bin/cronic
+sed "s/\$ADMIN_EMAIL/$ADMIN_EMAIL/g" /opt/djevops/conf/crontab > crontab
+crontab crontab
+rm crontab
 
 log 'Setting up automatic updates...'
 apt-get install unattended-upgrades -y > /dev/null
