@@ -18,15 +18,11 @@ def main():
     GIT_SERVER = get_env('GIT_SERVER', 'github.com')
     GIT_REPO_NAME = get_env('GIT_REPO_NAME', required=True)
     GIT_REPO_BRANCH = get_env('GIT_REPO_BRANCH', 'main')
-    GIT_REPO_PUBKEY = get_env('GIT_REPO_PUBKEY')
     GIT_REPO_PRIVKEY = get_env('GIT_REPO_PRIVKEY')
     SMTP_HOST = get_env('SMTP_HOST')
     ADMIN_EMAIL = get_env('ADMIN_EMAIL')
 
-    if GIT_REPO_PUBKEY and not GIT_REPO_PRIVKEY:
-        error('You must set GIT_REPO_PRIVKEY when using GIT_REPO_PUBKEY.')
-
-    if GIT_REPO_PUBKEY:
+    if GIT_REPO_PRIVKEY:
         GIT_REPO_URL = f'git@{GIT_SERVER}:{GIT_REPO_NAME}.git'
     else:
         GIT_REPO_URL = f'https://{GIT_SERVER}/{GIT_REPO_NAME}.git'
@@ -52,15 +48,14 @@ def main():
     _chown('/home/django', 'django', 'django')
     chmod('/home/django', 0o700)
 
-    if GIT_REPO_PUBKEY:
+    if GIT_REPO_PRIVKEY:
         log('Setting up SSH keys for cloning the Git repository...')
         makedirs('.ssh', exist_ok=True)
-        with open('.ssh/id_rsa.pub', 'w') as f:
-            f.write(GIT_REPO_PUBKEY)
-        chmod('.ssh/id_rsa.pub', 0o644)
         with open('.ssh/id_rsa', 'w') as f:
             f.write(GIT_REPO_PRIVKEY.replace('\\n', '\n'))
         chmod('.ssh/id_rsa', 0o600)
+        _run('ssh-keygen -y -f .ssh/id_rsa > .ssh/id_rsa.pub')
+        chmod('.ssh/id_rsa.pub', 0o644)
 
     log('Adding git repository server to known hosts...')
     _run(f'ssh-keyscan -H {GIT_SERVER} > .ssh/known_hosts 2>/dev/null')
