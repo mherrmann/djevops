@@ -74,3 +74,12 @@ mail:
 Secrets are specified as constants in file `djevops/secrets.py`.
 
 Then, you can run `djevops setup` to deploy your Django app to your server.
+
+## Development
+
+Install the requirements in `requirements/test.txt`. For example:
+
+    pip install -r requirements/test.txt
+
+Then, you can do `python -m unittest` to run tests. This requires Hetzner and
+DNSimple API keys, which need to be set via environment variables.
