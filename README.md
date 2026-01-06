@@ -24,8 +24,53 @@ of requests each month.
 
 ## Prerequisites
 
-You need a Linux VPS running Debian 12 with SSH `root` access. This machine
+You need a Linux VPS running Debian 12+ with SSH `root` access. This machine
 needs to be reachable from the internet and have a domain name associated with
 it. For example, you can rent the VPS from [Linode](https://linode.com) and buy
 the domain from [DNSimple](https://dnsimple.com). Then, just create a DNS `A`
 record that ties the domain to the VPS's IP.
+
+## Getting started
+
+You need a file `djevops/deploy.yml` in your project directory that for example
+looks as follows:
+
+```
+server: 172.104.151.194
+
+git:
+  repo: mherrmann/djangotutorial
+  branch: main
+  key: GIT_REPO_PRIVKEY
+
+services:
+  web:
+    type: django
+    domains: [djangotutorial.herrmann.io]
+    env:
+      clear:
+        DEBUG: "False"
+        HOST_NAME: djangotutorial.herrmann.io
+        SERVER_EMAIL: djangotutorial@myservers.com
+        ADMIN_EMAIL: admin@gmail.com
+      secret:
+        - DJANGO_SECRET_KEY
+  celery:
+    type: celery
+    env:
+      inherit: web
+
+db:
+  type: sqlite
+
+redis:
+
+mail:
+  host: email-smtp.eu-central-1.amazonaws.com
+  user: SMTP_USER
+  password: SMTP_PASSWORD
+```
+
+Secrets are specified as constants in file `djevops/secrets.py`.
+
+Then, you can run `djevops setup` to deploy your Django app to your server.

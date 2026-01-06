@@ -1,0 +1,14 @@
+/var/log/nginx/$SERVICE-access.log
+/var/log/nginx/$SERVICE-error.log {
+    create 0640 www-data adm
+    missingok
+    rotate 5
+    size 100M
+    compress
+    delaycompress
+    notifempty
+    sharedscripts
+    postrotate
+        nginx -s reopen
+    endscript
+}

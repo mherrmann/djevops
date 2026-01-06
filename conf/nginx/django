@@ -1,8 +1,29 @@
-proxy_set_header X-Real-IP $remote_addr;
-proxy_set_header X-Forwarded-Protocol $scheme;
-proxy_set_header Host $host;
-proxy_redirect off;
-if (!-f $request_filename) {
-    proxy_pass http://django;
-    break;
+upstream $SERVICE {
+  server unix:/var/run/django/$SERVICE.sock fail_timeout=0;
+}
+
+server {
+    server_name $SERVER_NAME;
+
+    listen 80;
+
+    include /etc/nginx/includes/$SERVICE-ssl;
+
+    access_log /var/log/nginx/$SERVICE-access.log;
+    error_log /var/log/nginx/$SERVICE-error.log;
+
+    location /static/ {
+        alias /srv/static/;
+    }
+
+    location / {
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Protocol $scheme;
+        proxy_set_header Host $host;
+        proxy_redirect off;
+        if (!-f $request_filename) {
+            proxy_pass http://$SERVICE;
+            break;
+        }
+    }
 }

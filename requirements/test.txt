@@ -1,0 +1,15 @@
+-r base.txt
+
+dnsimple==2.15.0
+hcloud==2.13.0
+requests==2.32.5
+
+# Transitive dependencies of the above:
+
+certifi==2026.1.4
+charset-normalizer==3.4.4
+idna==3.11
+omitempty==0.1.1
+python-dateutil==2.9.0.post0
+six==1.17.0
+urllib3==2.6.2

@@ -1,0 +1,12 @@
+/var/log/$SERVICE.log {
+    create 0640 $USER $USER
+    missingok
+    rotate 5
+    size 100M
+    compress
+    delaycompress
+    notifempty
+    postrotate
+        kill -USR2 `cat /run/supervisord.pid`
+    endscript
+}

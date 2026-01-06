@@ -1,0 +1,17 @@
+server: $SERVER
+
+git:
+  repo: mherrmann/djangotutorial
+  branch: main
+
+services:
+  web:
+    type: django
+    domains: [$DOMAIN]
+    env:
+      clear:
+        DEBUG: "True"
+        HOST_NAME: $DOMAIN
+
+db:
+  type: sqlite

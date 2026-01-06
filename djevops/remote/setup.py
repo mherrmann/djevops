@@ -1,34 +1,45 @@
 from datetime import datetime
+from djevops.remote.actions import migrate_db, collect_static_files, \
+    run_in_django_shell, get_django_setting
+from djevops.remote.scaffold import get_deploy_config, get_secrets, \
+    SQLITE_DB_FILE
+from djevops.util import copy_with_replace
 from grp import getgrnam
 from os import chmod, makedirs, remove, chown, symlink
 from os.path import exists
 from pwd import getpwnam
-from shutil import rmtree
+from random import randint
+from shutil import rmtree, copyfile
 from subprocess import PIPE, STDOUT, run, CalledProcessError
 
-import os
 import sys
-
 
 ERROR_ALREADY_EXISTS = 9
 
-
 def main():
-    HOST_NAME = get_env('HOST_NAME', required=True)
-    GIT_SERVER = get_env('GIT_SERVER', 'github.com')
-    GIT_REPO_NAME = get_env('GIT_REPO_NAME', required=True)
-    GIT_REPO_BRANCH = get_env('GIT_REPO_BRANCH', 'main')
-    GIT_REPO_PRIVKEY = get_env('GIT_REPO_PRIVKEY')
-    SMTP_HOST = get_env('SMTP_HOST')
-    ADMIN_EMAIL = get_env('ADMIN_EMAIL')
+    config = get_deploy_config()
+    secrets = get_secrets()
 
-    if GIT_REPO_PRIVKEY:
-        GIT_REPO_URL = f'git@{GIT_SERVER}:{GIT_REPO_NAME}.git'
+    host_name = config['server']
+    for service in config['services'].values():
+        try:
+            host_name = service['domains'][0]
+            break
+        except (KeyError, IndexError):
+            pass
+
+    git_server = config['git'].get('server', 'github.com')
+    git_repo_name = config['git']['repo']
+    git_repo_branch = config['git'].get('branch', 'main')
+    git_repo_key = config['git'].get('key')
+
+    if git_repo_key:
+        git_repo_url = f'git@{git_server}:{git_repo_name}.git'
     else:
-        GIT_REPO_URL = f'https://{GIT_SERVER}/{GIT_REPO_NAME}.git'
+        git_repo_url = f'https://{git_server}/{git_repo_name}.git'
 
     log('Setting hostname...')
-    _run(['hostnamectl', 'set-hostname', HOST_NAME])
+    _run(['hostnamectl', 'set-hostname', host_name])
 
     log('Updating system...')
     _run('apt-get update -qq')
@@ -38,72 +49,185 @@ def main():
     install('git-core')
 
     log('Configuring git to avoid warnings when pulling...')
+    # TODO: Maybe this should be in the repo only?
     _run('git config --global pull.rebase true')
 
-    log('Creating application users...')
-    ensure_group_exists('django')
-    ensure_user_exists('django', 'django')
-
-    makedirs('/home/django', exist_ok=True)
-    _chown('/home/django', 'django', 'django')
-    chmod('/home/django', 0o700)
-
-    if GIT_REPO_PRIVKEY:
+    if git_repo_key:
         log('Setting up SSH keys for cloning the Git repository...')
-        makedirs('.ssh', exist_ok=True)
-        with open('.ssh/id_rsa', 'w') as f:
-            f.write(GIT_REPO_PRIVKEY.replace('\\n', '\n'))
-        chmod('.ssh/id_rsa', 0o600)
-        _run('ssh-keygen -y -f .ssh/id_rsa > .ssh/id_rsa.pub')
-        chmod('.ssh/id_rsa.pub', 0o644)
+        git_key = secrets[git_repo_key]
+        makedirs('/root/.ssh', exist_ok=True)
+        with open('/root/.ssh/id_rsa', 'w') as f:
+            f.write(git_key)
+        chmod('/root/.ssh/id_rsa', 0o600)
+        _run('ssh-keygen -y -f /root/.ssh/id_rsa > /root/.ssh/id_rsa.pub')
+        chmod('/root/.ssh/id_rsa.pub', 0o644)
 
     log('Adding git repository server to known hosts...')
-    _run(f'ssh-keyscan -H {GIT_SERVER} > .ssh/known_hosts 2>/dev/null')
-    chmod('.ssh/known_hosts', 0o600)
+    _run(f'ssh-keyscan -H {git_server} > /root/.ssh/known_hosts 2>/dev/null')
+    chmod('/root/.ssh/known_hosts', 0o600)
 
     log('Cloning the repository...')
     try:
         rmtree('/srv/app')
     except FileNotFoundError:
         pass
-    _run(f'git clone -q -b {GIT_REPO_BRANCH} {GIT_REPO_URL} /srv/app')
+    _run(f'git clone -q -b {git_repo_branch} {git_repo_url} /srv/app')
 
-    if not exists('/srv/app/requirements.txt'):
-        error(
-            'Please create a requirements.txt file with your dependencies '
-            'in your repository.'
+    log('Setting up .bash_profile for root...')
+    symlink_force('/opt/djevops/conf/.bash_profile', '/root/.bash_profile')
+
+    log('Installing Supervisor...')
+    install('supervisor')
+
+    log('Installing OS dependencies for our Python environment...')
+    install('python3-venv')
+
+    log('Creating virtual environment...')
+    _run('python3 -m venv /srv/venv')
+
+    log('Installing Python dependencies...')
+    _run('/opt/djevops/bin/install-python-deps.sh')
+
+    log('Installing Nginx...')
+    install('nginx')
+
+    log('Creating Nginx includes directory...')
+    makedirs('/etc/nginx/includes', exist_ok=True)
+
+    log('Creating /var/lib/django directory...')
+    django_group = 'django'
+    ensure_group_exists(django_group)
+    makedirs('/var/lib/django', exist_ok=True)
+    _chown('/var/lib/django', group_name=django_group)
+    chmod('/var/lib/django', 0o770)
+
+    log('Configuring services...')
+    user_envs = {}
+    admin_email = None
+    service_domains = {}
+    # TODO: Rewrite this to use get_services_users_envs(...)
+    for service_name, service in config['services'].items():
+        env_config = service.get('env', {})
+        if list(env_config) == ['inherit']:
+            user = env_config['inherit']
+        else:
+            user = service_name
+            ensure_group_exists(user)
+            ensure_user_exists(user, user)
+            _run(f'usermod -a -G {django_group} {user}')
+            home_dir = f'/home/{user}'
+            makedirs(home_dir, exist_ok=True)
+            _chown(home_dir, user, user)
+            chmod(home_dir, 0o700)
+            symlink_force(
+                '/opt/djevops/conf/.bash_profile', f'{home_dir}/.bash_profile'
+            )
+            env = {
+                'SQLITE_DB_FILE': SQLITE_DB_FILE,
+                'STATIC_ROOT': '/srv/static',
+                'PATH': '/srv/venv/bin:$PATH'
+            }
+            env.update(env_config.get('clear', {}))
+            for secret_name in env_config.get('secret', []):
+                env[secret_name] = secrets[secret_name]
+            with open(f'{home_dir}/.bashrc', 'w') as f:
+                for key, value in env.items():
+                    f.write(f'export {key}="{value}"\n')
+            _chown(f'{home_dir}/.bashrc', user, user)
+            user_envs[user] = env
+        if service['type'] == 'django':
+            user_env = user_envs[user]
+            run_in_django_shell([
+                'import sys',
+                'sys.path.append("/opt/djevops/bin")',
+                'from check_django_settings import main',
+                'main()'
+            ], env=user_env)
+            if not admin_email:
+                admins = get_django_setting('ADMINS', user_env)
+                if admins:
+                    admin_email = admins[0][1]
+            supervisor_conf_file = 'gunicorn.conf'
+            nginx_available_file = '/etc/nginx/sites-available/' + service_name
+            copy_with_replace(
+                '/opt/djevops/conf/nginx/django', nginx_available_file,
+                {
+                    '$SERVER_NAME': ' '.join(service['domains']),
+                    '$SERVICE': service_name,
+                }
+            )
+            # Placeholder until Certbot runs:
+            open(f'/etc/nginx/includes/{service_name}-ssl', 'w').close()
+            symlink_force(
+                nginx_available_file, '/etc/nginx/sites-enabled/' + service_name
+            )
+            copy_with_replace(
+                f'/opt/djevops/conf/logrotate/nginx',
+                f'/etc/logrotate.d/{service_name}-nginx',
+                {'$SERVICE': service_name}
+            )
+            service_domains[service_name] = service['domains'][:]
+        elif service['type'] == 'celery':
+            supervisor_conf_file = 'celery.conf'
+        else:
+            error(f"Unknown service type: {service['type']}")
+        replacements = {'$SERVICE': service_name, '$USER': user}
+        copy_with_replace(
+            f'/opt/djevops/conf/supervisor/{supervisor_conf_file}',
+            f'/etc/supervisor/conf.d/{service_name}.conf',
+            replacements
+        )
+        copy_with_replace(
+            f'/opt/djevops/conf/logrotate/service',
+            f'/etc/logrotate.d/{service_name}',
+            replacements
         )
 
-    log('Setting up bash profiles...')
-    symlink_force('/opt/djevops/conf/.bash_profile', '/root/.bash_profile')
-    symlink_force(
-        '/opt/djevops/conf/.bash_profile', '/home/django/.bash_profile'
+    # Make a self-signed certificate just so we can serve SSL for requests with
+    # incorrect host names.
+    makedirs('/etc/nginx/certs/default', exist_ok=True)
+    _run([
+        'openssl', 'req', '-x509', '-nodes', '-newkey', 'rsa:2048',
+        '-keyout', '/etc/nginx/certs/default/privkey.pem',
+        '-out', '/etc/nginx/certs/default/fullchain.pem',
+        '-days', '36500',
+        '-subj', '/CN=default.invalid'
+    ])
+    copyfile(
+        '/opt/djevops/conf/nginx/default', '/etc/nginx/sites-available/default'
     )
 
-    bashrc_lines = [
-        f'export HOST_NAME={HOST_NAME}',
-        'export SQLITE_DB_FILE=/var/lib/django/db.sqlite3',
-        'export STATIC_ROOT=/srv/static',
-        'export PATH="/srv/venv/bin:$PATH"',
-    ]
-    if exists('/srv/app/conf/django.bashrc'):
-        result = run(
-            '/usr/bin/envsubst < /srv/app/conf/django.bashrc',
-            shell=True,
-            capture_output=True,
-            text=True
-        )
-        bashrc_lines.append(result.stdout)
+    if service_domains:
+        log('Configuring SSL certificates...')
+        install('certbot python3-certbot-nginx')
+        register_args = ['certbot', 'register', '--quiet', '--agree-tos']
+        if admin_email:
+            register_args.extend(['--email', admin_email])
+        else:
+            register_args.append('--register-unsafely-without-email')
+        try:
+            run(
+                register_args, stdout=PIPE, stderr=STDOUT, text=True, check=True
+            )
+        except CalledProcessError as e:
+            if e.returncode != 1 or \
+                not 'There is an existing account' in e.stdout:
+                raise
+        for service_name, domains in service_domains.items():
+            certbot_cmd = [
+                'certbot', 'certonly', '--nginx', '--cert-name', service_name,
+                '--quiet'
+            ]
+            for domain in domains:
+                certbot_cmd.extend(['-d', domain])
+            _run(certbot_cmd)
+            copy_with_replace(
+                '/opt/djevops/conf/nginx/ssl',
+                f'/etc/nginx/includes/{service_name}-ssl',
+                {'$SERVICE': service_name}
+            )
 
-    with open('/home/django/.bashrc', 'w') as f:
-        f.write('\n'.join(bashrc_lines) + '\n')
-    _chown('/home/django/.bashrc', 'django', 'django')
-
-    log('Creating data directory...')
-    makedirs('/var/lib/django', exist_ok=True)
-    _chown('/var/lib/django', 'django', 'django')
-
-    if SMTP_HOST:
+    if config.get('mail'):
         log('Installing iptables-persistent...')
         debconf_set_selections(
             'iptables-persistent iptables-persistent/autosave_v4 boolean true'
@@ -119,7 +243,7 @@ def main():
         _run('iptables-save > /etc/iptables/rules.v4')
 
         log('Installing Postfix...')
-        debconf_set_selections(f'postfix postfix/mailname string {HOST_NAME}')
+        debconf_set_selections(f'postfix postfix/mailname string {host_name}')
         debconf_set_selections(
             "postfix postfix/main_mailer_type string 'Internet Site'"
         )
@@ -127,18 +251,31 @@ def main():
 
         log('Configuring Postfix...')
         with open('/etc/mailname', 'w') as f:
-            f.write(HOST_NAME + '\n')
+            f.write(host_name + '\n')
         _chown('/etc/mailname', 'postfix')
-        _run(
-            f"envsubst '$SMTP_HOST $HOST_NAME' < "
-            f"/opt/djevops/conf/postfix/main.cf > /etc/postfix/main.cf"
+        smtp_host = config['mail']['host']
+        copy_with_replace(
+            '/opt/djevops/conf/postfix/main.cf',
+            '/etc/postfix/main.cf',
+            {
+                '$HOST_NAME': host_name,
+                '$SMTP_HOST': smtp_host,
+            }
         )
-        _run(
-            'envsubst < /opt/djevops/conf/postfix/sasl_passwd > '
-            '/etc/postfix/sasl_passwd'
+        copy_with_replace(
+            '/opt/djevops/conf/postfix/sasl_passwd',
+            '/etc/postfix/sasl_passwd',
+            {
+                '$SMTP_HOST': config['mail']['host'],
+                '$SMTP_USER': secrets[config['mail']['user']],
+                '$SMTP_PASSWORD': secrets[config['mail']['password']],
+            }
         )
         _chown('/etc/postfix', 'postfix')
-        _run('rm /etc/postfix/sasl_passwd.db')
+        try:
+            remove('/etc/postfix/sasl_passwd.db')
+        except FileNotFoundError:
+            pass
         _run('postmap /etc/postfix/sasl_passwd')
         chmod('/etc/postfix/sasl_passwd', 0o400)
         _chown('/etc/postfix/sasl_passwd', 'postfix')
@@ -152,133 +289,38 @@ def main():
         _chown('/etc/postfix/generic', 'postfix')
         _run('/etc/init.d/postfix reload')
 
-    log('Creating directories for static files...')
-    makedirs('/srv/static', exist_ok=True)
-
-    log('Installing OS dependencies for our Python environment...')
-    install('python3-venv')
-
-    log('Creating virtual environment...')
-    _run('python3 -m venv /srv/venv')
-
-    log('Installing Python dependencies...')
-    _run('/opt/djevops/bin/install-python-deps.sh')
-
-    result = run(
-        '/srv/venv/bin/python -c "import celery"',
-        shell=True,
-        capture_output=True
-    )
-    USES_CELERY = result.returncode == 0
-
-    log('Checking Django settings...')
-    _run(
-        'su -c "/opt/djevops/bin/manage.sh shell --pythonpath '
-        '/opt/djevops/bin -c \'from check_django_settings import main; '
-        'main()\' -v 0" - django'
-    )
-
-    if USES_CELERY:
-        log('Celery detected. Installing Redis...')
+    if 'redis' in config:
+        log('Installing Redis...')
         install('redis-server')
 
     log('Migrating database...')
-    _run('/opt/djevops/bin/migrate-db.sh')
+    migrate_db()
+
+    log('Creating directories for static files...')
+    makedirs('/srv/static', exist_ok=True)
 
     log('Collecting static files...')
-    _run('/opt/djevops/bin/collect-static-files.sh')
+    collect_static_files()
 
     log('Initializing run/ directory...')
     _run('/opt/djevops/bin/init-run-dir.sh')
 
-    log('Installing Supervisor...')
-    install('supervisor')
-
-    log('Configuring Supervisor...')
-    symlink_force(
-        '/opt/djevops/conf/supervisor/gunicorn.conf',
-        '/etc/supervisor/conf.d/gunicorn.conf'
-    )
-
-    if USES_CELERY:
-        symlink_force(
-            '/opt/djevops/conf/supervisor/beat.conf ',
-            '/etc/supervisor/conf.d/beat.conf'
-        )
-        symlink_force(
-            '/opt/djevops/conf/supervisor/worker.conf ',
-            '/etc/supervisor/conf.d/worker.conf'
-        )
-
     log('Starting services...')
     _run('supervisorctl reread')
     _run('supervisorctl update')
-
-    log('Installing Nginx...')
-    install('nginx')
-
-    log('Creating Nginx includes directory...')
-    makedirs('/etc/nginx/includes', exist_ok=True)
-
-    log('Creating Nginx config...')
-    _run(
-        'envsubst < /opt/djevops/conf/nginx/server-name > '
-        '/etc/nginx/includes/server-name'
-    )
-    symlink_force(
-        '/opt/djevops/conf/nginx/django', '/etc/nginx/includes/django'
-    )
-    _run('touch /etc/nginx/includes/ssl')
-
-    log('Applying Nginx config...')
-    symlink_force(
-        '/opt/djevops/conf/nginx/nginx', '/etc/nginx/sites-available/django'
-    )
-    symlink_force(
-        '/etc/nginx/sites-available/django', '/etc/nginx/sites-enabled/django'
-    )
-    try:
-        remove('/etc/nginx/sites-enabled/default')
-    except FileNotFoundError:
-        pass
-
-    log('Starting Nginx...')
     _run('service nginx restart')
 
-    log('Generating SSL certificates...')
-    install('certbot python3-certbot-nginx')
-    try:
-        run(
-            [
-                'certbot', 'register', '--quiet', '--email', ADMIN_EMAIL,
-                '--agree-tos'
-            ],
-            stdout=PIPE,
-            stderr=STDOUT,
-            text=True,
-            check=True
-        )
-    except CalledProcessError as e:
-        if e.returncode != 1 or not 'There is an existing account' in e.stdout:
-            raise
-    _run([
-        'certbot', 'certonly', '--nginx', '--quiet', '--cert-name', 'main',
-        '-d', HOST_NAME
-    ])
-    symlink_force('/opt/djevops/conf/nginx/ssl', '/etc/nginx/includes/ssl')
-    _run('service nginx restart')
-
-    log(f'The server is now serving requests at {HOST_NAME}!')
-
-    log('Setting up logrotate...')
-    symlink_force('/opt/djevops/conf/logrotate', '/etc/logrotate.d/django')
+    log(f'The server is now serving requests at {host_name}!')
 
     log('Setting up crontab...')
     symlink_force('/opt/djevops/bin/cronic', '/usr/bin/cronic')
-    _run(
-        f'sed "s/\\$ADMIN_EMAIL/{ADMIN_EMAIL}/g" '
-        f'/opt/djevops/conf/crontab > crontab'
-    )
+    with open('crontab', 'w') as f:
+        if admin_email:
+            f.write(f'MAILTO={admin_email}\n')
+        f.write('@reboot /opt/djevops/bin/init-run-dir.sh\n')
+        minute = randint(0, 59)
+        hour = randint(0, 23)
+        f.write(f'{minute} {hour} */7 * * cronic certbot renew\n')
     _run('crontab crontab')
     remove('crontab')
 
@@ -290,10 +332,8 @@ def main():
 
     log('Done.')
 
-
 def install(packages):
     _run(f'apt-get install -yqq {packages}')
-
 
 def ensure_group_exists(group_name):
     _run(
@@ -301,19 +341,16 @@ def ensure_group_exists(group_name):
         ignore_errors=(ERROR_ALREADY_EXISTS,)
     )
 
-
 def ensure_user_exists(user_name, group_name):
     _run([
         'useradd', '--system', '--gid', group_name, '--shell', '/bin/bash',
         user_name
     ], ignore_errors=(ERROR_ALREADY_EXISTS,))
 
-
-def _chown(path, user_name, group_name=None):
-    uid = getpwnam(user_name).pw_uid
+def _chown(path, user_name=None, group_name=None):
+    uid = -1 if user_name is None else getpwnam(user_name).pw_uid
     gid = -1 if group_name is None else getgrnam(group_name).gr_gid
     chown(path, uid, gid)
-
 
 def symlink_force(source, link_name):
     try:
@@ -322,45 +359,32 @@ def symlink_force(source, link_name):
         remove(link_name)
         symlink(source, link_name)
 
-
 def debconf_set_selections(value):
     run(['debconf-set-selections'], input=value + '\n', text=True, check=True)
-
 
 def log(message):
     timestamp = datetime.now().strftime('%H:%M:%S')
     print(f'\n\033[0;32m{timestamp}\033[0m \033[0;93m{message}\033[0m')
-
 
 def error(message):
     timestamp = datetime.now().strftime('%H:%M:%S')
     print(f'\n\033[0;32m{timestamp}\033[0m \033[0;91m{message}\033[0m')
     sys.exit(1)
 
-
-def _run(cmd, ignore_errors=()):
+def _run(cmd, ignore_errors=(), env=None):
     shell = isinstance(cmd, str)
     try:
         return run(
-            cmd, shell=shell, stdout=PIPE, stderr=STDOUT, text=True, check=True
+            cmd, shell=shell, stdout=PIPE, stderr=STDOUT, text=True, check=True,
+            env=env
         )
     except CalledProcessError as e:
         if e.returncode not in ignore_errors:
             raise
 
-
-def get_env(var_name, default=None, required=False):
-    value = os.environ.get(var_name, default)
-    if required and not value:
-        error(
-            f'Please set {var_name} in your .bashrc. '
-            f'For example: export {var_name}=value'
-        )
-    return value
-
-
 if __name__ == '__main__':
     try:
         main()
     except CalledProcessError as e:
-        error(f'Command failed: {e.cmd}\nError: {e.stdout}')
+        output = e.stderr or e.stdout
+        error(f'Command failed: {e.cmd}\nOutput: {output}')

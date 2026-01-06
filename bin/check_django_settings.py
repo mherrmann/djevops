@@ -87,5 +87,5 @@ def is_writeable(path: Path):
             return True
 
 def error(message):
-    print(message)
+    sys.stderr.write(message + '\n')
     sys.exit(1)
