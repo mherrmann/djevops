@@ -25,7 +25,7 @@ class SystemTest(TestCase):
 
     SSH_PUBLIC_KEY = TEST_DIR / 'id_rsa.pub'
     SSH_PRIVATE_KEY = TEST_DIR / 'id_rsa'
-    DEPLOY_YML = TEST_DIR / 'djevops' / 'deploy.yml'
+    DEPLOY_YML = TEST_DIR / 'deploy.yml'
 
     @classmethod
     def setUpClass(cls):
