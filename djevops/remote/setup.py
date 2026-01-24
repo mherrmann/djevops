@@ -1,5 +1,5 @@
 from datetime import datetime
-from djevops.config import SQLITE_DB_FILE
+from djevops.config import get_services_users_envs
 from djevops.remote.actions import migrate_db, collect_static_files, \
     get_django_setting
 from djevops.remote.scaffold import get_deploy_config, get_secrets
@@ -102,16 +102,12 @@ def main():
     chmod('/var/lib/django', 0o770)
 
     log('Configuring services...')
-    user_envs = {}
+    created_users = set()
     admin_email = None
     service_domains = {}
-    # TODO: Rewrite this to use get_services_users_envs(...)
-    for service_name, service in config['services'].items():
-        env_config = service.get('env', {})
-        if list(env_config) == ['inherit']:
-            user = env_config['inherit']
-        else:
-            user = service_name
+    services_users_envs = get_services_users_envs(config, secrets)
+    for service_name, (user, env) in services_users_envs.items():
+        if user not in created_users:
             ensure_group_exists(user)
             ensure_user_exists(user, user)
             _run(f'usermod -a -G {django_group} {user}')
@@ -122,23 +118,15 @@ def main():
             symlink_force(
                 '/opt/djevops/conf/.bash_profile', f'{home_dir}/.bash_profile'
             )
-            env = {
-                'SQLITE_DB_FILE': SQLITE_DB_FILE,
-                'STATIC_ROOT': '/srv/static',
-                'PATH': '/srv/venv/bin:$PATH'
-            }
-            env.update(env_config.get('clear', {}))
-            for secret_name in env_config.get('secret', []):
-                env[secret_name] = secrets[secret_name]
             with open(f'{home_dir}/.bashrc', 'w') as f:
                 for key, value in env.items():
                     f.write(f'export {key}="{value}"\n')
             _chown(f'{home_dir}/.bashrc', user, user)
-            user_envs[user] = env
+            created_users.add(user)
+        service = config['services'][service_name]
         if service['type'] == 'django':
-            user_env = user_envs[user]
             if not admin_email:
-                admins = get_django_setting('ADMINS', user_env)
+                admins = get_django_setting('ADMINS', env)
                 if admins:
                     admin_email = admins[0][1]
             supervisor_conf_file = 'gunicorn.conf'
