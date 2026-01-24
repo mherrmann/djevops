@@ -1,22 +1,23 @@
-from djevops.util import copy_with_replace
+from contextlib import contextmanager
+from djevops.__main__ import CommandError, init, setup
+from djevops.util import git
 from dnsimple import Client as DNSimpleClient
 from dnsimple.struct.zone_record import ZoneRecordInput
 from hcloud import Client as HetznerClient
 from hcloud._exceptions import APIException
 from hcloud.images import Image
 from hcloud.server_types import ServerType
-from os import remove, mkdir
-from os.path import dirname, join
+from os import remove, chdir
 from pathlib import Path
-from subprocess import DEVNULL, run, PIPE, STDOUT
+from subprocess import DEVNULL, run, CalledProcessError
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from time import time, sleep
 from unittest import TestCase
 
-import djevops
+import django
 import os
 import requests
-import sys
+import yaml
 
 
 class SystemTest(TestCase):
@@ -43,61 +44,182 @@ class SystemTest(TestCase):
             print(f'Warning: Failed to delete SSH key: {e}')
 
     def setUp(self):
-        test_name = f'djevops-test-{int(time())}'
-        self.server = create_hetzner_server(
-            os.environ['HETZNER_API_TOKEN'], self.ssh_key, test_name
-        )
-        self.server_ip = self.server.public_net.ipv4.ip
-        test_domain = os.environ['DNSIMPLE_TEST_DOMAIN']
-        self.dns_record = DNSimpleARecord.create(
-            os.environ['DNSIMPLE_API_TOKEN'], os.environ['DNSIMPLE_ACCOUNT_ID'],
-            test_domain, test_name, self.server_ip
-        )
-        self.server_hostname = f'{test_name}.{test_domain}'
+        self.server = self.dns_record = None
+        self.test_name = f'djevops-test-{int(time())}'
+        self.test_domain = os.environ['DNSIMPLE_TEST_DOMAIN']
+        self.server_hostname = f'{self.test_name}.{self.test_domain}'
         with NamedTemporaryFile(delete=False) as known_hosts_file:
             self.known_hosts_file = known_hosts_file.name
-        wait_for_server_to_be_ready(
-            'root', self.server_ip, self.SSH_PRIVATE_KEY, self.known_hosts_file
-        )
         self.temp_dir = TemporaryDirectory()
-    
-    def tearDown(self):
-        try:
-            self.dns_record.delete()
-        except Exception as e:
-            print(
-                f'Warning: Failed to delete DNS record {self.dns_record}: {e}'
-            )
-        try:
-            self.server.delete()
-        except Exception as e:
-            print(f'Warning: Failed to delete server {self.server}: {e}')
-        remove(self.known_hosts_file)
-        self.temp_dir.cleanup()
-
-    def test_setup(self):
-        djevops_dir = join(self.temp_dir.name, 'djevops')
-        mkdir(djevops_dir)
-        copy_with_replace(self.DEPLOY_YML, join(djevops_dir, 'deploy.yml'), {
-            '$SERVER': self.server_ip,
-            '$DOMAIN': self.server_hostname
-        })
-
-        env = os.environ.copy()
-        env['DJEVOPS_SSH_COMMAND'] = \
+        self.cwd_before = os.getcwd()
+        chdir(self.temp_dir.name)
+        os.environ['DJEVOPS_SSH_COMMAND'] = \
             f'ssh -i {self.SSH_PRIVATE_KEY} ' \
             f'-o UserKnownHostsFile={self.known_hosts_file}'
-        env['PYTHONPATH'] = dirname(djevops.__path__[0])
 
-        result = run(
-            [sys.executable, '-m', 'djevops', 'setup'], cwd=self.temp_dir.name,
-            env=env, stdout=PIPE, stderr=STDOUT, text=True
+    def create_server(self):
+        self.server = create_hetzner_server(
+            os.environ['HETZNER_API_TOKEN'], self.ssh_key, self.test_name
         )
-        self.assertEqual(result.returncode, 0, result.stdout)
+        server_ip = self.server.public_net.ipv4.ip
+        self.dns_record = DNSimpleARecord.create(
+            os.environ['DNSIMPLE_API_TOKEN'], os.environ['DNSIMPLE_ACCOUNT_ID'],
+            self.test_domain, self.test_name, server_ip
+        )
+        wait_for_server_to_be_ready(
+            'root', server_ip, self.SSH_PRIVATE_KEY, self.known_hosts_file
+        )
+        return server_ip
+
+    def tearDown(self):
+        self.delete_remote_branch_if_exists(self.test_name)
+        remove(self.known_hosts_file)
+        chdir(self.cwd_before)
+        self.temp_dir.cleanup()
+        os.environ.pop('DJEVOPS_SSH_COMMAND')
+        if self.dns_record:
+            try:
+                self.dns_record.delete()
+            except Exception as e:
+                print(
+                    f'Warning: Failed to delete DNS record {self.dns_record}: '
+                    f'{e}'
+                )
+        if self.server:
+            try:
+                self.server.delete()
+            except Exception as e:
+                print(f'Warning: Failed to delete server {self.server}: {e}')
+
+    def test_init(self):
+        self.expect_init_error(
+            'There is no manage.py file in the current directory. Do you '
+            'already have a Django project?'
+        )
+        run(['django-admin', 'startproject', 'testapp', '.'], check=True)
+
+        self.expect_init_error(
+            'Please create a requirements.txt file. For example, by running:\n'
+            '    pip freeze > requirements.txt'
+        )
+        open('requirements.txt', 'w').close()
+
+        self.expect_init_error(
+            'Please add `django` to your requirements.txt file.'
+        )
+        with open('requirements.txt', 'w') as f:
+            f.write('django==' + django.get_version())
+
+        self.expect_init_error(
+            'Please add `gunicorn` to your requirements.txt file.'
+        )
+        with open('requirements.txt', 'a') as f:
+            f.write('\ngunicorn==24.1.1')
+
+        self.expect_init_error('This directory is not a Git repository.')
+        git('init', '-q', '-b', self.test_name)
+        git('add', '.')
+        git('commit', '-m', 'Initial commit')
+
+        self.expect_init_error(
+            "This Git repository has no remotes. If you add one, don't forget "
+            "to run `git push` after."
+        )
+        git('remote', 'add', 'origin', os.environ['TEST_REPO_URL'])
+        git('push', '-u', 'origin', self.test_name)
+
+        init()
+
+    def test_setup(self):
+        self.test_init()
+
+        self.expect_setup_error(
+            "Please set your server's IP address in deploy.yml. For example:\n"
+            "    server: 1.2.3.4"
+        )
+
+        with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['server'] = '1.2.3.4'
+
+        self.expect_setup_error(
+            'Please set Django setting ALLOWED_HOSTS to the list of domains '
+            'under which your server is accessible. For example, in '
+            'settings.py:\n\n'
+            '    import os\n'
+            '    ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(" ")\n\n'
+            'And in deploy.yml:\n\n'
+            '    services:\n'
+            '      web:\n'
+            '        type: django\n'
+            '        domains: [my.website.com]\n'
+            '      env:\n'
+            '        clear:\n'
+            '          ALLOWED_HOSTS: my.website.com'
+        )
+
+        with open('testapp/settings.py', 'a') as f:
+            f.write(
+                'import os\n'
+                'ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(" ")'
+            )
+
+        with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['services']['web']['domains'] = [self.server_hostname]
+            deploy_yml['services']['web']['env'] = {
+                'clear': {
+                    'ALLOWED_HOSTS': self.server_hostname
+                }
+            }
+
+        # TODO: Catch it when the necessary files are not committed.
+        git('add', 'testapp/settings.py')
+        git('commit', '-m', 'Make ready for djevops setup')
+        git('push')
+
+        server_ip = self.create_server()
+        with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['server'] = server_ip
+
+        setup()
 
         response = requests.get(f'https://{self.server_hostname}')
         self.assertEqual(response.status_code, 200)
         self.assertIn('The install worked', response.text)
+
+    def expect_init_error(self, message):
+        with self.expect_command_error(message):
+            init()
+
+    def expect_setup_error(self, message):
+        with self.expect_command_error(message):
+            setup()
+
+    @contextmanager
+    def expect_command_error(self, message):
+        with self.assertRaises(CommandError) as cm:
+            yield
+        self.assertEqual(message, cm.exception.args[0])
+
+    @contextmanager
+    def update_deploy_yml(self):
+        with open('djevops/deploy.yml') as f:
+            deploy_yml = yaml.safe_load(f)
+        yield deploy_yml
+        with open('djevops/deploy.yml', 'w') as f:
+            f.write(yaml.dump(deploy_yml))
+
+    def delete_remote_branch_if_exists(self, name):
+        try:
+            git('branch', '--show-current')
+        except CalledProcessError as no_git_repo:
+            pass
+        else:
+            try:
+                git('remote', 'get-url', 'origin')
+            except CalledProcessError as no_remote:
+                pass
+            else:
+                git('push', 'origin', '--delete', name)
 
 def ensure_hetzner_ssh_key_exists(api_token, ssh_key_content, name):
     hetzner = HetznerClient(token=api_token)

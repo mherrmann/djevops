@@ -1,6 +1,6 @@
 from datetime import datetime
 from djevops.remote.actions import migrate_db, collect_static_files, \
-    run_in_django_shell, get_django_setting
+    get_django_setting
 from djevops.remote.scaffold import get_deploy_config, get_secrets, \
     SQLITE_DB_FILE
 from djevops.util import copy_with_replace
@@ -137,12 +137,6 @@ def main():
             user_envs[user] = env
         if service['type'] == 'django':
             user_env = user_envs[user]
-            run_in_django_shell([
-                'import sys',
-                'sys.path.append("/opt/djevops/bin")',
-                'from check_django_settings import main',
-                'main()'
-            ], env=user_env)
             if not admin_email:
                 admins = get_django_setting('ADMINS', user_env)
                 if admins:

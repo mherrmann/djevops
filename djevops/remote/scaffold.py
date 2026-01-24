@@ -11,6 +11,7 @@ def get_secrets():
     with open('/root/secrets.json') as f:
         return json.load(f)
 
+# TODO: Move this out of remote.
 def get_services_users_envs(config, secrets):
     result = {}
     for service_name, service in config['services'].items():
