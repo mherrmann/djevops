@@ -1,3 +1,4 @@
+from djevops.config import get_django_service
 from djevops.remote.scaffold import get_deploy_config, get_secrets, \
     get_services_users_envs
 from djevops.util import run_in_django_shell
@@ -38,10 +39,3 @@ def _get_django_env(config=None, secrets=None):
     django_service_name = get_django_service(config)[0]
     user_envs = get_services_users_envs(config, secrets)
     return user_envs[django_service_name][1]
-
-# TODO: Move this out of remote.
-def get_django_service(config):
-    for service_name, service in config['services'].items():
-        if service['type'] == 'django':
-            return service_name, service
-    raise LookupError('No Django service found')

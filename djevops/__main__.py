@@ -1,4 +1,4 @@
-from djevops.remote.actions import get_django_service
+from djevops.config import get_django_service
 from djevops.remote.scaffold import get_services_users_envs
 from djevops.util import git, run_in_django_shell
 from os import remove, makedirs
