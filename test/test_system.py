@@ -53,9 +53,10 @@ class SystemTest(TestCase):
         self.temp_dir = TemporaryDirectory()
         self.cwd_before = os.getcwd()
         chdir(self.temp_dir.name)
-        os.environ['DJEVOPS_SSH_COMMAND'] = \
+        self.ssh_command = \
             f'ssh -i {self.SSH_PRIVATE_KEY} ' \
             f'-o UserKnownHostsFile={self.known_hosts_file}'
+        os.environ['DJEVOPS_SSH_COMMAND'] = self.ssh_command
 
     def create_server(self):
         self.server = create_hetzner_server(
@@ -172,9 +173,7 @@ class SystemTest(TestCase):
             }
 
         # TODO: Catch it when the necessary files are not committed.
-        git('add', 'testapp/settings.py')
-        git('commit', '-m', 'Make ready for djevops setup')
-        git('push')
+        commit('testapp/settings.py', 'Set Django setting ALLOWED_HOSTS')
 
         server_ip = self.create_server()
         with self.update_deploy_yml() as deploy_yml:
@@ -185,6 +184,36 @@ class SystemTest(TestCase):
         response = requests.get(f'https://{self.server_hostname}')
         self.assertEqual(response.status_code, 200)
         self.assertIn('The install worked', response.text)
+
+        with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['db'] = {'type': 'sqlite'}
+
+        self.expect_setup_error(
+            "Please set DATABASES['default']['NAME'] in settings.py to the "
+            "value of environment variable SQLITE_DB_FILE. A good expression "
+            "is:\n"
+            "    os.getenv('SQLITE_DB_FILE') or <what you had before>"
+        )
+
+        with open('testapp/settings.py', 'a') as f:
+            f.write(
+                "\n"
+                "DATABASES['default']['NAME'] = os.getenv('SQLITE_DB_FILE') "
+                "or DATABASES['default']['NAME']"
+            )
+
+        commit('testapp/settings.py', 'Configure SQLite db file path')
+
+        setup()
+
+        # Test that the `web` user can write to the database:
+        run(
+            self.ssh_command + ' root@' + server_ip + " 'su -c \"" +
+            "DJANGO_SUPERUSER_USERNAME=admin DJANGO_SUPERUSER_PASSWORD=admin "
+            "/srv/venv/bin/python /srv/app/manage.py createsuperuser "
+            "--email admin@admin.com --noinput"
+            "\" - web'", shell=True, check=True
+        )
 
     def expect_init_error(self, message):
         with self.expect_command_error(message):
@@ -284,3 +313,8 @@ def wait_for_server_to_be_ready(
         sleep(1)
     else:
         raise TimeoutError(f'Server not ready after {timeout_secs} seconds')
+
+def commit(file_path, message):
+    git('add', file_path)
+    git('commit', '-m', message)
+    git('push')

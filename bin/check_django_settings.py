@@ -1,9 +1,12 @@
 from django.conf import settings
 
+import os
 import sys
 
-def main(domains):
+def main(domains, has_db):
     check_allowed_hosts(domains)
+    if has_db:
+        check_databases()
 
 def check_allowed_hosts(domains):
     # TODO: Allow wildcards in ALLOWED_HOSTS.
@@ -22,6 +25,15 @@ def check_allowed_hosts(domains):
             '      env:\n'
             '        clear:\n'
             '          ALLOWED_HOSTS: my.website.com'
+        )
+
+def check_databases():
+    if settings.DATABASES['default']['NAME'] != os.environ['SQLITE_DB_FILE']:
+        error(
+            "Please set DATABASES['default']['NAME'] in settings.py to the "
+            "value of environment variable SQLITE_DB_FILE. A good expression "
+            "is:\n"
+            "    os.getenv('SQLITE_DB_FILE') or <what you had before>"
         )
 
 def error(message):

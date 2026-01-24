@@ -135,12 +135,14 @@ def check_config(deploy_config, secrets):
     user_envs = get_services_users_envs(deploy_config, secrets)
     django_env = user_envs[django_service_name][1]
 
+    has_db = bool(deploy_config.get('db'))
+
     bin_dir = join(dirname(dirname(__file__)), 'bin')
     error_msg = run_in_django_shell([
         'import sys',
         f"sys.path.append('{bin_dir}')",
         'from check_django_settings import main',
-        f'main({domains!r})',
+        f'main({domains!r}, {has_db})',
     ], env=django_env)
     if error_msg:
         raise CommandError(error_msg)

@@ -1,7 +1,7 @@
 from datetime import datetime
-from djevops.config import get_services_users_envs
-from djevops.remote.actions import migrate_db, collect_static_files, \
-    get_django_setting
+from djevops.config import get_services_users_envs, SQLITE_DB_FILE
+from djevops.remote.actions import install_python_deps, migrate_db, \
+    collect_static_files, get_django_setting
 from djevops.remote.scaffold import get_deploy_config, get_secrets
 from djevops.util import copy_with_replace
 from grp import getgrnam
@@ -86,7 +86,7 @@ def main():
     _run('python3 -m venv /srv/venv')
 
     log('Installing Python dependencies...')
-    _run('/opt/djevops/bin/install-python-deps.sh')
+    install_python_deps()
 
     log('Installing Nginx...')
     install('nginx')
@@ -277,8 +277,11 @@ def main():
         log('Installing Redis...')
         install('redis-server')
 
-    log('Migrating database...')
-    migrate_db()
+    if config.get('db'):
+        log('Migrating database...')
+        migrate_db()
+        _chown(SQLITE_DB_FILE, group_name=django_group)
+        chmod(SQLITE_DB_FILE, 0o660)
 
     log('Creating directories for static files...')
     makedirs('/srv/static', exist_ok=True)

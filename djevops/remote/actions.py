@@ -7,6 +7,11 @@ import json
 
 MANAGE_SH = '/opt/djevops/bin/manage.sh'
 
+def install_python_deps():
+    pip = '/srv/venv/bin/pip'
+    run([pip, 'install', '-U', 'pip'], check=True)
+    run([pip, 'install', '-r', '/srv/app/requirements.txt'], check=True)
+
 def migrate_db():
     _run_manage_sh('migrate')
 
