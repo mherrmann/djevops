@@ -128,7 +128,9 @@ def main():
             if not admin_email:
                 admins = get_django_setting('ADMINS', env)
                 if admins:
-                    admin_email = admins[0][1]
+                    admin_email = admins[0]
+                    if not isinstance(admin_email, str):
+                        admin_email = admin_email[1]
             supervisor_conf_file = 'gunicorn.conf'
             nginx_available_file = '/etc/nginx/sites-available/' + service_name
             copy_with_replace(
