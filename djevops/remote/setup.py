@@ -1,8 +1,8 @@
 from datetime import datetime
+from djevops.config import SQLITE_DB_FILE
 from djevops.remote.actions import migrate_db, collect_static_files, \
     get_django_setting
-from djevops.remote.scaffold import get_deploy_config, get_secrets, \
-    SQLITE_DB_FILE
+from djevops.remote.scaffold import get_deploy_config, get_secrets
 from djevops.util import copy_with_replace
 from grp import getgrnam
 from os import chmod, makedirs, remove, chown, symlink

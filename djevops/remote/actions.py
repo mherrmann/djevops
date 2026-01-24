@@ -1,6 +1,5 @@
-from djevops.config import get_django_service
-from djevops.remote.scaffold import get_deploy_config, get_secrets, \
-    get_services_users_envs
+from djevops.config import get_services_users_envs, get_django_service
+from djevops.remote.scaffold import get_deploy_config, get_secrets
 from djevops.util import run_in_django_shell
 from subprocess import run
 
