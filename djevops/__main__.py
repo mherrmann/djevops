@@ -1,7 +1,6 @@
-from djevops.remote.actions import run_in_django_shell, \
-    get_django_service
+from djevops.remote.actions import get_django_service
 from djevops.remote.scaffold import get_services_users_envs
-from djevops.util import git
+from djevops.util import git, run_in_django_shell
 from os import remove, makedirs
 from os.path import dirname, exists, join
 from runpy import run_path

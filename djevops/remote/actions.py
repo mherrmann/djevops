@@ -1,9 +1,9 @@
 from djevops.remote.scaffold import get_deploy_config, get_secrets, \
     get_services_users_envs
-from subprocess import run, PIPE, STDOUT
+from djevops.util import run_in_django_shell
+from subprocess import run
 
 import json
-import sys
 
 MANAGE_SH = '/opt/djevops/bin/manage.sh'
 
@@ -16,6 +16,8 @@ def collect_static_files():
         _run_manage_sh('collectstatic', '--noinput')
 
 def get_django_setting(setting_name, env=None):
+    if env is None:
+        env = _get_django_env()
     # Use json because it seems a little safer than eval()
     setting_json = run_in_django_shell([
         'from django.conf import settings',
@@ -24,16 +26,6 @@ def get_django_setting(setting_name, env=None):
         '/srv/venv/bin/python', '/srv/app/manage.py', env
     )
     return json.loads(setting_json)
-
-# TODO: Move this out of remote.
-def run_in_django_shell(
-    cmds, executable=sys.executable, manage_py='manage.py', env=None
-):
-    if env is None:
-        env = _get_django_env()
-    args = [executable, manage_py, 'shell', '-v', '0', '-c', ' ; '.join(cmds)]
-    cp = run(args, env=env, stdout=PIPE, stderr=STDOUT, text=True, check=True)
-    return cp.stdout.strip()
 
 def _run_manage_sh(*args):
     run([MANAGE_SH] + list(args), env=_get_django_env(), check=True)
