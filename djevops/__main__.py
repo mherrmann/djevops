@@ -151,7 +151,7 @@ def check_config(deploy_config, secrets):
 def install_djevops_on_server(user, host):
     ssh_ = lambda cmd: ssh(user, host, cmd)
     print('Installing deps...')
-    deps = 'rsync python3-venv'
+    deps = 'rsync'
     install_deps = \
         f'DEBIAN_FRONTEND=noninteractive ' \
         f'apt-get install -yqq {deps} >/dev/null 2>&1'
@@ -160,6 +160,10 @@ def install_djevops_on_server(user, host):
     ssh_(
         'dpkg -s %s >/dev/null 2>&1 || { %s || { apt-get update -qq && %s; }; }'
         % (deps, install_deps, install_deps)
+    )
+    ssh_(
+        'command -v uv >/dev/null 2>&1 || '
+        'curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1'
     )
     print('Copying djevops to server...')
     rsync(
@@ -171,12 +175,6 @@ def install_djevops_on_server(user, host):
         "--filter=:- .gitignore",
         "--delete-after"
     )
-    print('Creating virtual environment...')
-    ssh_(
-        'cd /opt/djevops && ' +
-        'python3 -m venv venv && ' +
-        'venv/bin/pip install -qqq -r requirements/base.txt'
-    )
 
 def get_secrets(path):
     if not exists(path):
@@ -186,11 +184,7 @@ def get_secrets(path):
     }
 
 def run_with_djevops_venv(user, host, cmd):
-    ssh(
-        user, host,
-        f'source /opt/djevops/venv/bin/activate && '
-        f'PYTHONPATH=/opt/djevops {cmd}'
-    )
+    ssh(user, host, f'~/.local/bin/uv run --project /opt/djevops {cmd}')
 
 def rsync(*args):
     ssh_cmd = get_ssh_command()
