@@ -62,8 +62,7 @@ class SystemTest(TestCase):
     def setUp(self):
         self.server = self.dns_record = None
         self.test_name = f'djevops-test-{int(time())}'
-        self.test_domain = self.DNSIMPLE_TEST_DOMAIN
-        self.server_hostname = f'{self.test_name}.{self.test_domain}'
+        self.server_hostname = f'{self.test_name}.{self.DNSIMPLE_TEST_DOMAIN}'
         with NamedTemporaryFile(delete=False) as known_hosts_file:
             self.known_hosts_file = known_hosts_file.name
         self.temp_dir = TemporaryDirectory()
@@ -81,7 +80,7 @@ class SystemTest(TestCase):
         self.server_ip = self.server.public_net.ipv4.ip
         self.dns_record = DNSimpleARecord.create(
             self.DNSIMPLE_API_TOKEN, self.DNSIMPLE_ACCOUNT_ID,
-            self.test_domain, self.test_name, self.server_ip
+            self.DNSIMPLE_TEST_DOMAIN, self.test_name, self.server_ip
         )
         wait_for_server_to_be_ready(
             'root', self.server_ip, self.SSH_PRIVATE_KEY, self.known_hosts_file
