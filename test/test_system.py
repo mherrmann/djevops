@@ -267,9 +267,6 @@ class OnlineTest(_DjevopsTest):
         super().tearDown()
 
     def test_setup(self):
-        with self.update_deploy_yml() as deploy_yml:
-            deploy_yml['server'] = self.server_ip
-
         setup()
 
         response = requests.get(f'https://{self.server_hostname}')
