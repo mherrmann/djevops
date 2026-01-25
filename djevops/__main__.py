@@ -17,6 +17,8 @@ import yaml
 SAMPLE_SERVER_IP = '0.0.0.0'
 SAMPLE_DOMAIN = 'example.com'
 
+SECRETS_NAME_RE = r'^[A-Z][A-Z0-9_]+$'
+
 class CommandError(Exception):
     pass
 
@@ -176,7 +178,9 @@ def install_djevops_on_server(user, host):
 def get_secrets(path):
     if not exists(path):
         return {}
-    return run_path(path)
+    return {
+        k: v for k, v in run_path(path).items() if re.match(SECRETS_NAME_RE, k)
+    }
 
 def run_with_djevops_venv(user, host, cmd):
     ssh(
