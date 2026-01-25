@@ -1,5 +1,6 @@
 from djevops.config import get_services_users_envs, get_django_service
-from djevops.util import git, run_in_django_shell, run_silently
+from djevops.util import git, get_apt_install_cmd, run_in_django_shell, \
+    run_silently
 from os import remove, makedirs
 from os.path import dirname, exists, join
 from runpy import run_path
@@ -150,16 +151,7 @@ def check_config(deploy_config, secrets):
 
 def install_djevops_on_server(user, host):
     ssh_ = lambda cmd: ssh(user, host, cmd)
-    deps = 'rsync'
-    install_deps = \
-        f'DEBIAN_FRONTEND=noninteractive ' \
-        f'apt-get install -yqq {deps} >/dev/null 2>&1'
-    # Only call apt-get install and ... update when necessary. This speeds up
-    # repeat invocations of this function.
-    ssh_(
-        'dpkg -s %s >/dev/null 2>&1 || { %s || { apt-get update -qq && %s; }; }'
-        % (deps, install_deps, install_deps)
-    )
+    ssh_(get_apt_install_cmd('rsync'))
     ssh_(
         'command -v uv >/dev/null 2>&1 || '
         'curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1'

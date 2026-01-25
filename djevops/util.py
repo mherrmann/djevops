@@ -34,3 +34,14 @@ class CalledProcessErrorShowingOutput(CalledProcessError):
         if self.output:
             result += f' Its output was:\n"""\n{self.output}\n"""'
         return result
+
+def get_apt_install_cmd(packages):
+    install_cmd = \
+        f'DEBIAN_FRONTEND=noninteractive ' \
+        f'apt-get install -yqq {packages} >/dev/null 2>&1'
+    # Use `dpkg -s` to check if the packages are already installed, because it
+    # is faster than apt-get. Also call `apt-get update`, but only if necessary.
+    return (
+        'dpkg -s %s >/dev/null 2>&1 || { %s || { apt-get update -qq && %s; }; }'
+        % (packages, install_cmd, install_cmd)
+    )

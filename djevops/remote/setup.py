@@ -3,7 +3,7 @@ from djevops.config import get_services_users_envs, SQLITE_DB_FILE
 from djevops.remote.actions import install_python_deps, migrate_db, \
     collect_static_files, get_django_setting
 from djevops.remote.scaffold import get_deploy_config, get_secrets
-from djevops.util import copy_with_replace
+from djevops.util import copy_with_replace, get_apt_install_cmd
 from grp import getgrnam
 from os import chmod, makedirs, remove, chown, symlink
 from os.path import exists
@@ -40,10 +40,6 @@ def main():
 
     log('Setting hostname...')
     _run(['hostnamectl', 'set-hostname', host_name])
-
-    log('Updating system...')
-    _run('apt-get update -qq')
-    _run('apt-get upgrade -yqq')
 
     log('Installing git...')
     install('git-core')
@@ -320,7 +316,7 @@ def main():
     log('Done.')
 
 def install(packages):
-    _run(f'apt-get install -yqq {packages}')
+    _run(get_apt_install_cmd(packages))
 
 def ensure_group_exists(group_name):
     _run(
@@ -350,7 +346,7 @@ def debconf_set_selections(value):
     run(['debconf-set-selections'], input=value + '\n', text=True, check=True)
 
 def log(message):
-    timestamp = datetime.now().strftime('%H:%M:%S')
+    timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
     print(f'\n\033[0;32m{timestamp}\033[0m \033[0;93m{message}\033[0m')
 
 def error(message):
