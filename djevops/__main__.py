@@ -151,12 +151,16 @@ def check_config(deploy_config, secrets):
 
 def install_djevops_on_server(user, host):
     ssh_ = lambda cmd: ssh(user, host, cmd)
-    print('Updating system...')
-    ssh_('apt-get update -qq')
-    print('Installing rsync and python3-venv...')
+    print('Installing deps...')
+    deps = 'rsync python3-venv'
+    install_deps = \
+        f'DEBIAN_FRONTEND=noninteractive ' \
+        f'apt-get install -yqq {deps} >/dev/null 2>&1'
+    # Only call apt-get install and ... update when necessary. This speeds up
+    # repeat invocations of this function.
     ssh_(
-        'DEBIAN_FRONTEND=noninteractive '
-        'apt-get install rsync python3-venv -yqq > /dev/null'
+        'dpkg -s %s >/dev/null 2>&1 || { %s || { apt-get update -qq && %s; }; }'
+        % (deps, install_deps, install_deps)
     )
     print('Copying djevops to server...')
     rsync(
