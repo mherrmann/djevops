@@ -1,10 +1,9 @@
 from djevops.config import get_services_users_envs, get_django_service
-from djevops.util import git, run_in_django_shell
+from djevops.util import git, run_in_django_shell, run_silently
 from os import remove, makedirs
 from os.path import dirname, exists, join
 from runpy import run_path
 from shlex import quote
-from subprocess import run
 from tempfile import NamedTemporaryFile
 from urllib.parse import urlparse
 
@@ -196,11 +195,11 @@ def run_with_djevops_venv(user, host, cmd):
 def rsync(*args):
     ssh_cmd = get_ssh_command()
     extra_rsync_args = [] if ssh_cmd == 'ssh' else ['-e', ssh_cmd]
-    run(['rsync', *extra_rsync_args, *args], check=True)
+    run_silently(['rsync', *extra_rsync_args, *args])
 
 def ssh(user, host, cmd):
     ssh_cmd = get_ssh_command()
-    return run(f'{ssh_cmd} {user}@{host} {quote(cmd)}', shell=True, check=True)
+    return run_silently(f'{ssh_cmd} {user}@{host} {quote(cmd)}', shell=True)
 
 def get_ssh_command():
     try:

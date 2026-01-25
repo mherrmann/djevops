@@ -1,17 +1,13 @@
 from djevops.config import get_services_users_envs, get_django_service
 from djevops.remote.scaffold import get_deploy_config, get_secrets
-from djevops.util import run_in_django_shell
-from subprocess import run, PIPE, STDOUT
+from djevops.util import run_in_django_shell, run_silently
 
 import json
 
 MANAGE_SH = '/opt/djevops/bin/manage.sh'
 
 def install_python_deps():
-    pip = lambda *args: run(
-        ['/srv/venv/bin/pip', *args],
-        stdout=PIPE, stderr=STDOUT, text=True, check=True
-    )
+    pip = lambda *args: run_silently(['/srv/venv/bin/pip', *args])
     pip('install', '-U', 'pip')
     pip('install', '-r', '/srv/app/requirements.txt')
 
@@ -36,7 +32,7 @@ def get_django_setting(setting_name, env=None):
     return json.loads(setting_json)
 
 def _run_manage_sh(*args):
-    run([MANAGE_SH] + list(args), env=_get_django_env(), check=True)
+    run_silently([MANAGE_SH] + list(args), env=_get_django_env())
 
 def _get_django_env(config=None, secrets=None):
     if config is None:

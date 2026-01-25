@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 from djevops.__main__ import CommandError, init, setup
 from djevops.remote.actions import MANAGE_SH
-from djevops.util import git
+from djevops.util import git, run_silently
 from dnsimple import Client as DNSimpleClient
 from dnsimple.struct.zone_record import ZoneRecordInput
 from hcloud import Client as HetznerClient
@@ -97,9 +97,8 @@ class SystemTest(TestInTempDir):
         )
 
     def ssh(self, cmd):
-        return run(
-            f'{self.ssh_command} root@{self.server_ip} {quote(cmd)}',
-            shell=True, check=True
+        return run_silently(
+            f'{self.ssh_command} root@{self.server_ip} {quote(cmd)}', shell=True
         )
 
     def tearDown(self):
@@ -126,7 +125,7 @@ class SystemTest(TestInTempDir):
             'There is no manage.py file in the current directory. Do you '
             'already have a Django project?'
         )
-        run(['django-admin', 'startproject', 'testapp', '.'], check=True)
+        run_silently(['django-admin', 'startproject', 'testapp', '.'])
 
         self.expect_init_error(
             'Please create a requirements.txt file. For example, by running:\n'
