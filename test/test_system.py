@@ -267,12 +267,22 @@ class OnlineTest(_DjevopsTest):
         super().tearDown()
 
     def test_setup(self):
+        # It would be nicer to run these as separate test_ methods, but it would
+        # be extremely slow to create and delete the server for each test. If
+        # `unittest` had support for parallel execution, it would not be too
+        # bad. Alas, it doesn't.
+        self._test_web_access()
+        self._test_db()
+        self._test_email()
+
+    def _test_web_access(self):
         setup()
 
         response = requests.get(f'https://{self.server_hostname}')
         self.assertEqual(response.status_code, 200)
         self.assertIn('The install worked', response.text)
 
+    def _test_db(self):
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['db'] = {'type': 'sqlite'}
 
@@ -301,7 +311,7 @@ class OnlineTest(_DjevopsTest):
         )
         self.ssh(f"su -c '{create_superuser_cmd}' - web")
 
-        # Test the email functionality:
+    def _test_email(self):
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['mail'] = {
                 'host': SMTP_HOST,
