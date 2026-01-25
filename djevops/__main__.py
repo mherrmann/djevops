@@ -221,5 +221,5 @@ if __name__ == '__main__':
         else:
             raise CommandError(f'Unknown command: {command}')
     except CommandError as e:
-        print(e.args[0])
+        sys.stderr.write(e.args[0] + '\n')
         sys.exit(1)
