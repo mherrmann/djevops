@@ -23,7 +23,19 @@ import requests
 import yaml
 
 
-class SystemTest(TestCase):
+class TestInTempDir(TestCase):
+
+    def setUp(self):
+        self.temp_dir = TemporaryDirectory()
+        self.cwd_before = os.getcwd()
+        chdir(self.temp_dir.name)
+
+    def tearDown(self):
+        chdir(self.cwd_before)
+        self.temp_dir.cleanup()
+
+
+class SystemTest(TestInTempDir):
 
     HETZNER_API_TOKEN = os.environ['HETZNER_API_TOKEN']
     DNSIMPLE_TEST_DOMAIN = os.environ['DNSIMPLE_TEST_DOMAIN']
@@ -60,14 +72,12 @@ class SystemTest(TestCase):
             print(f'Warning: Failed to delete SSH key: {e}')
 
     def setUp(self):
+        super().setUp()
         self.server = self.dns_record = None
         self.test_name = f'djevops-test-{int(time())}'
         self.server_hostname = f'{self.test_name}.{self.DNSIMPLE_TEST_DOMAIN}'
         with NamedTemporaryFile(delete=False) as known_hosts_file:
             self.known_hosts_file = known_hosts_file.name
-        self.temp_dir = TemporaryDirectory()
-        self.cwd_before = os.getcwd()
-        chdir(self.temp_dir.name)
         self.ssh_command = \
             f'ssh -i {self.SSH_PRIVATE_KEY} ' \
             f'-o UserKnownHostsFile={self.known_hosts_file}'
@@ -95,8 +105,6 @@ class SystemTest(TestCase):
     def tearDown(self):
         self.delete_remote_branch_if_exists(self.test_name)
         remove(self.known_hosts_file)
-        chdir(self.cwd_before)
-        self.temp_dir.cleanup()
         os.environ.pop('DJEVOPS_SSH_COMMAND')
         if self.dns_record:
             try:
@@ -111,6 +119,7 @@ class SystemTest(TestCase):
                 self.server.delete()
             except Exception as e:
                 print(f'Warning: Failed to delete server {self.server}: {e}')
+        super().tearDown()
 
     def test_init(self):
         self.expect_init_error(
