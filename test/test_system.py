@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from djevops.__main__ import CommandError, init, setup
+from djevops.remote.actions import MANAGE_SH
 from djevops.util import git
 from dnsimple import Client as DNSimpleClient
 from dnsimple.struct.zone_record import ZoneRecordInput
@@ -7,8 +8,10 @@ from hcloud import Client as HetznerClient
 from hcloud._exceptions import APIException
 from hcloud.images import Image
 from hcloud.server_types import ServerType
+from imaplib import IMAP4_SSL
 from os import remove, chdir
 from pathlib import Path
+from shlex import quote
 from subprocess import DEVNULL, run, CalledProcessError
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from time import time, sleep
@@ -27,6 +30,13 @@ class SystemTest(TestCase):
     DNSIMPLE_API_TOKEN = os.environ['DNSIMPLE_API_TOKEN']
     DNSIMPLE_ACCOUNT_ID = os.environ['DNSIMPLE_ACCOUNT_ID']
     TEST_REPO_URL = os.environ['TEST_REPO_URL']
+
+    # Can use (non-business) Gmail for these: smtp.gmail.com, imap.gmail.com.
+    # The user is the email address. The password is an "app password".
+    SMTP_HOST = os.environ['SMTP_HOST']
+    IMAP_HOST = os.environ['IMAP_HOST']
+    EMAIL_USER = os.environ['EMAIL_USER']
+    EMAIL_PASSWORD = os.environ['EMAIL_PASSWORD']
 
     TEST_DIR = Path(__file__).parent
 
@@ -68,15 +78,20 @@ class SystemTest(TestCase):
         self.server = create_hetzner_server(
             self.HETZNER_API_TOKEN, self.ssh_key, self.test_name
         )
-        server_ip = self.server.public_net.ipv4.ip
+        self.server_ip = self.server.public_net.ipv4.ip
         self.dns_record = DNSimpleARecord.create(
             self.DNSIMPLE_API_TOKEN, self.DNSIMPLE_ACCOUNT_ID,
-            self.test_domain, self.test_name, server_ip
+            self.test_domain, self.test_name, self.server_ip
         )
         wait_for_server_to_be_ready(
-            'root', server_ip, self.SSH_PRIVATE_KEY, self.known_hosts_file
+            'root', self.server_ip, self.SSH_PRIVATE_KEY, self.known_hosts_file
         )
-        return server_ip
+
+    def ssh(self, cmd):
+        return run(
+            f'{self.ssh_command} root@{self.server_ip} {quote(cmd)}',
+            shell=True, check=True
+        )
 
     def tearDown(self):
         self.delete_remote_branch_if_exists(self.test_name)
@@ -181,9 +196,9 @@ class SystemTest(TestCase):
         # TODO: Catch it when the necessary files are not committed.
         commit('testapp/settings.py', 'Set Django setting ALLOWED_HOSTS')
 
-        server_ip = self.create_server()
+        self.create_server()
         with self.update_deploy_yml() as deploy_yml:
-            deploy_yml['server'] = server_ip
+            deploy_yml['server'] = self.server_ip
 
         setup()
 
@@ -213,13 +228,39 @@ class SystemTest(TestCase):
         setup()
 
         # Test that the `web` user can write to the database:
-        run(
-            self.ssh_command + ' root@' + server_ip + " 'su -c \"" +
+        create_superuser_cmd = (
             "DJANGO_SUPERUSER_USERNAME=admin DJANGO_SUPERUSER_PASSWORD=admin "
-            "/srv/venv/bin/python /srv/app/manage.py createsuperuser "
-            "--email admin@admin.com --noinput"
-            "\" - web'", shell=True, check=True
+            f"{MANAGE_SH} createsuperuser --email admin@admin.com --noinput"
         )
+        self.ssh(f"su -c '{create_superuser_cmd}' - web")
+
+        # Test the email functionality:
+        with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['mail'] = {
+                'host': self.SMTP_HOST,
+                'user': 'EMAIL_USER',
+                'password': 'EMAIL_PASSWORD',
+            }
+
+        with open('djevops/secrets.py', 'w') as f:
+            f.write(f'EMAIL_USER = {self.EMAIL_USER!r}\n')
+            f.write(f'EMAIL_PASSWORD = {self.EMAIL_PASSWORD!r}\n')
+
+        setup()
+
+        send_mail_script = (
+            f'from django.core.mail import send_mail; '
+            f'send_mail({self.test_name!r}, "Test body", '
+            f'{self.EMAIL_USER!r}, [{self.EMAIL_USER!r}])'
+        )
+        remote_cmd = f"{MANAGE_SH} shell -c {quote(send_mail_script)}"
+        self.ssh(remote_cmd)
+
+        email_found = wait_for_email(
+            self.IMAP_HOST, self.EMAIL_USER, self.EMAIL_PASSWORD,
+            self.test_name, delete=True
+        )
+        self.assertTrue(email_found, 'Test email was not received')
 
     def expect_init_error(self, message):
         with self.expect_command_error(message):
@@ -324,3 +365,21 @@ def commit(file_path, message):
     git('add', file_path)
     git('commit', '-m', message)
     git('push')
+
+def wait_for_email(
+    imap_host, user, password, subject, delete=False, timeout_secs=60
+):
+    start_time = time()
+    while time() < start_time + timeout_secs:
+        with IMAP4_SSL(imap_host) as imap:
+            imap.login(user, password)
+            imap.select('INBOX')
+            _, message_ids = imap.search(None, 'SUBJECT', subject)
+            if message_ids[0]:
+                if delete:
+                    for msg_id in message_ids[0].split():
+                        imap.store(msg_id, '+FLAGS', '\\Deleted')
+                    imap.expunge()
+                return True
+        sleep(1)
+    return False
