@@ -150,7 +150,6 @@ def check_config(deploy_config, secrets):
 
 def install_djevops_on_server(user, host):
     ssh_ = lambda cmd: ssh(user, host, cmd)
-    print('Installing deps...')
     deps = 'rsync'
     install_deps = \
         f'DEBIAN_FRONTEND=noninteractive ' \
@@ -165,7 +164,6 @@ def install_djevops_on_server(user, host):
         'command -v uv >/dev/null 2>&1 || '
         'curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1'
     )
-    print('Copying djevops to server...')
     rsync(
         '-ra',
         dirname(dirname(__file__)) + '/',
