@@ -23,7 +23,21 @@ import requests
 import yaml
 
 
-class TestInTempDir(TestCase):
+HETZNER_API_TOKEN = os.environ['HETZNER_API_TOKEN']
+DNSIMPLE_TEST_DOMAIN = os.environ['DNSIMPLE_TEST_DOMAIN']
+DNSIMPLE_API_TOKEN = os.environ['DNSIMPLE_API_TOKEN']
+DNSIMPLE_ACCOUNT_ID = os.environ['DNSIMPLE_ACCOUNT_ID']
+TEST_REPO_URL = os.environ['TEST_REPO_URL']
+
+# Can use (non-business) Gmail for these: smtp.gmail.com, imap.gmail.com.
+# The user is the email address. The password is an "app password".
+SMTP_HOST = os.environ['SMTP_HOST']
+IMAP_HOST = os.environ['IMAP_HOST']
+EMAIL_USER = os.environ['EMAIL_USER']
+EMAIL_PASSWORD = os.environ['EMAIL_PASSWORD']
+
+
+class _TestInTempDir(TestCase):
 
     def setUp(self):
         self.temp_dir = TemporaryDirectory()
@@ -35,90 +49,53 @@ class TestInTempDir(TestCase):
         self.temp_dir.cleanup()
 
 
-class SystemTest(TestInTempDir):
+class _DjevopsTest(_TestInTempDir):
 
-    HETZNER_API_TOKEN = os.environ['HETZNER_API_TOKEN']
-    DNSIMPLE_TEST_DOMAIN = os.environ['DNSIMPLE_TEST_DOMAIN']
-    DNSIMPLE_API_TOKEN = os.environ['DNSIMPLE_API_TOKEN']
-    DNSIMPLE_ACCOUNT_ID = os.environ['DNSIMPLE_ACCOUNT_ID']
-    TEST_REPO_URL = os.environ['TEST_REPO_URL']
-
-    # Can use (non-business) Gmail for these: smtp.gmail.com, imap.gmail.com.
-    # The user is the email address. The password is an "app password".
-    SMTP_HOST = os.environ['SMTP_HOST']
-    IMAP_HOST = os.environ['IMAP_HOST']
-    EMAIL_USER = os.environ['EMAIL_USER']
-    EMAIL_PASSWORD = os.environ['EMAIL_PASSWORD']
-
-    TEST_DIR = Path(__file__).parent
-
-    SSH_PUBLIC_KEY = TEST_DIR / 'id_rsa.pub'
-    SSH_PRIVATE_KEY = TEST_DIR / 'id_rsa'
-    DEPLOY_YML = TEST_DIR / 'deploy.yml'
-
-    @classmethod
-    def setUpClass(cls):
-        ssh_key_content = cls.SSH_PUBLIC_KEY.read_text().strip()
-        cls.ssh_key = ensure_hetzner_ssh_key_exists(
-            cls.HETZNER_API_TOKEN, ssh_key_content,
-            f'djevops-test-{int(time())}'
-        )
-    
-    @classmethod
-    def tearDownClass(cls):
-        try:
-            cls.ssh_key.delete()
-        except Exception as e:
-            print(f'Warning: Failed to delete SSH key: {e}')
-
-    def setUp(self):
-        super().setUp()
-        self.server = self.dns_record = None
+    def __init__(self, *args, **kwargs):
         self.test_name = f'djevops-test-{int(time())}'
-        self.server_hostname = f'{self.test_name}.{self.DNSIMPLE_TEST_DOMAIN}'
-        with NamedTemporaryFile(delete=False) as known_hosts_file:
-            self.known_hosts_file = known_hosts_file.name
-        self.ssh_command = \
-            f'ssh -i {self.SSH_PRIVATE_KEY} ' \
-            f'-o UserKnownHostsFile={self.known_hosts_file}'
-        os.environ['DJEVOPS_SSH_COMMAND'] = self.ssh_command
-
-    def create_server(self):
-        self.server = create_hetzner_server(
-            self.HETZNER_API_TOKEN, self.ssh_key, self.test_name
-        )
-        self.server_ip = self.server.public_net.ipv4.ip
-        self.dns_record = DNSimpleARecord.create(
-            self.DNSIMPLE_API_TOKEN, self.DNSIMPLE_ACCOUNT_ID,
-            self.DNSIMPLE_TEST_DOMAIN, self.test_name, self.server_ip
-        )
-        wait_for_server_to_be_ready(
-            'root', self.server_ip, self.SSH_PRIVATE_KEY, self.known_hosts_file
-        )
-
-    def ssh(self, cmd):
-        return run_silently(
-            f'{self.ssh_command} root@{self.server_ip} {quote(cmd)}', shell=True
-        )
+        super().__init__(*args, **kwargs)
 
     def tearDown(self):
         self.delete_remote_branch_if_exists(self.test_name)
-        remove(self.known_hosts_file)
-        os.environ.pop('DJEVOPS_SSH_COMMAND')
-        if self.dns_record:
-            try:
-                self.dns_record.delete()
-            except Exception as e:
-                print(
-                    f'Warning: Failed to delete DNS record {self.dns_record}: '
-                    f'{e}'
-                )
-        if self.server:
-            try:
-                self.server.delete()
-            except Exception as e:
-                print(f'Warning: Failed to delete server {self.server}: {e}')
         super().tearDown()
+
+    def expect_init_error(self, message):
+        with self.expect_command_error(message):
+            init()
+
+    def expect_setup_error(self, message):
+        with self.expect_command_error(message):
+            setup()
+
+    @contextmanager
+    def expect_command_error(self, message):
+        with self.assertRaises(CommandError) as cm:
+            yield
+        self.assertEqual(message, cm.exception.args[0])
+
+    @contextmanager
+    def update_deploy_yml(self):
+        with open('djevops/deploy.yml') as f:
+            deploy_yml = yaml.safe_load(f)
+        yield deploy_yml
+        with open('djevops/deploy.yml', 'w') as f:
+            f.write(yaml.dump(deploy_yml))
+
+    def delete_remote_branch_if_exists(self, name):
+        try:
+            git('branch', '--show-current')
+        except CalledProcessError as no_git_repo:
+            pass
+        else:
+            try:
+                git('remote', 'get-url', 'origin')
+            except CalledProcessError as no_remote:
+                pass
+            else:
+                git('push', 'origin', '--delete', name)
+
+
+class OfflineTest(_DjevopsTest):
 
     def test_init(self):
         self.expect_init_error(
@@ -154,7 +131,7 @@ class SystemTest(TestInTempDir):
             "This Git repository has no remotes. If you add one, don't forget "
             "to run `git push` after."
         )
-        git('remote', 'add', 'origin', self.TEST_REPO_URL)
+        git('remote', 'add', 'origin', TEST_REPO_URL)
         git('push', '-u', 'origin', self.test_name)
 
         init()
@@ -185,6 +162,79 @@ class SystemTest(TestInTempDir):
             '        clear:\n'
             '          ALLOWED_HOSTS: my.website.com'
         )
+
+
+class OnlineTest(_DjevopsTest):
+
+    TEST_DIR = Path(__file__).parent
+
+    SSH_PUBLIC_KEY = TEST_DIR / 'id_rsa.pub'
+    SSH_PRIVATE_KEY = TEST_DIR / 'id_rsa'
+    DEPLOY_YML = TEST_DIR / 'deploy.yml'
+
+    @classmethod
+    def setUpClass(cls):
+        ssh_key_content = cls.SSH_PUBLIC_KEY.read_text().strip()
+        cls.ssh_key = ensure_hetzner_ssh_key_exists(
+            HETZNER_API_TOKEN, ssh_key_content, f'djevops-test-{int(time())}'
+        )
+    
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.ssh_key.delete()
+        except Exception as e:
+            print(f'Warning: Failed to delete SSH key: {e}')
+
+    def setUp(self):
+        super().setUp()
+        self.server = self.dns_record = None
+        self.server_hostname = f'{self.test_name}.{DNSIMPLE_TEST_DOMAIN}'
+        with NamedTemporaryFile(delete=False) as known_hosts_file:
+            self.known_hosts_file = known_hosts_file.name
+        self.ssh_command = \
+            f'ssh -i {self.SSH_PRIVATE_KEY} ' \
+            f'-o UserKnownHostsFile={self.known_hosts_file}'
+        os.environ['DJEVOPS_SSH_COMMAND'] = self.ssh_command
+
+    def create_server(self):
+        self.server = create_hetzner_server(
+            HETZNER_API_TOKEN, self.ssh_key, self.test_name
+        )
+        self.server_ip = self.server.public_net.ipv4.ip
+        self.dns_record = DNSimpleARecord.create(
+            DNSIMPLE_API_TOKEN, DNSIMPLE_ACCOUNT_ID, DNSIMPLE_TEST_DOMAIN,
+            self.test_name, self.server_ip
+        )
+        wait_for_server_to_be_ready(
+            'root', self.server_ip, self.SSH_PRIVATE_KEY, self.known_hosts_file
+        )
+
+    def ssh(self, cmd):
+        return run_silently(
+            f'{self.ssh_command} root@{self.server_ip} {quote(cmd)}', shell=True
+        )
+
+    def tearDown(self):
+        remove(self.known_hosts_file)
+        os.environ.pop('DJEVOPS_SSH_COMMAND')
+        if self.dns_record:
+            try:
+                self.dns_record.delete()
+            except Exception as e:
+                print(
+                    f'Warning: Failed to delete DNS record {self.dns_record}: '
+                    f'{e}'
+                )
+        if self.server:
+            try:
+                self.server.delete()
+            except Exception as e:
+                print(f'Warning: Failed to delete server {self.server}: {e}')
+        super().tearDown()
+
+    def test_setup(self):
+        OfflineTest().test_init()
 
         with open('testapp/settings.py', 'a') as f:
             f.write(
@@ -244,65 +294,29 @@ class SystemTest(TestInTempDir):
         # Test the email functionality:
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['mail'] = {
-                'host': self.SMTP_HOST,
+                'host': SMTP_HOST,
                 'user': 'EMAIL_USER',
                 'password': 'EMAIL_PASSWORD',
             }
 
         with open('djevops/secrets.py', 'w') as f:
-            f.write(f'EMAIL_USER = {self.EMAIL_USER!r}\n')
-            f.write(f'EMAIL_PASSWORD = {self.EMAIL_PASSWORD!r}\n')
+            f.write(f'EMAIL_USER = {EMAIL_USER!r}\n')
+            f.write(f'EMAIL_PASSWORD = {EMAIL_PASSWORD!r}\n')
 
         setup()
 
         send_mail_script = (
             f'from django.core.mail import send_mail; '
             f'send_mail({self.test_name!r}, "Test body", '
-            f'{self.EMAIL_USER!r}, [{self.EMAIL_USER!r}])'
+            f'{EMAIL_USER!r}, [{EMAIL_USER!r}])'
         )
         remote_cmd = f"{MANAGE_SH} shell -c {quote(send_mail_script)}"
         self.ssh(remote_cmd)
 
         email_found = wait_for_email(
-            self.IMAP_HOST, self.EMAIL_USER, self.EMAIL_PASSWORD,
-            self.test_name, delete=True
+            IMAP_HOST, EMAIL_USER, EMAIL_PASSWORD, self.test_name, delete=True
         )
         self.assertTrue(email_found, 'Test email was not received')
-
-    def expect_init_error(self, message):
-        with self.expect_command_error(message):
-            init()
-
-    def expect_setup_error(self, message):
-        with self.expect_command_error(message):
-            setup()
-
-    @contextmanager
-    def expect_command_error(self, message):
-        with self.assertRaises(CommandError) as cm:
-            yield
-        self.assertEqual(message, cm.exception.args[0])
-
-    @contextmanager
-    def update_deploy_yml(self):
-        with open('djevops/deploy.yml') as f:
-            deploy_yml = yaml.safe_load(f)
-        yield deploy_yml
-        with open('djevops/deploy.yml', 'w') as f:
-            f.write(yaml.dump(deploy_yml))
-
-    def delete_remote_branch_if_exists(self, name):
-        try:
-            git('branch', '--show-current')
-        except CalledProcessError as no_git_repo:
-            pass
-        else:
-            try:
-                git('remote', 'get-url', 'origin')
-            except CalledProcessError as no_remote:
-                pass
-            else:
-                git('push', 'origin', '--delete', name)
 
 def ensure_hetzner_ssh_key_exists(api_token, ssh_key_content, name):
     hetzner = HetznerClient(token=api_token)
