@@ -32,5 +32,5 @@ class CalledProcessErrorShowingOutput(CalledProcessError):
     def __str__(self):
         result = super().__str__()
         if self.output:
-            result += f' Output:\n{self.output}'
+            result += f' Its output was:\n"""\n{self.output}\n"""'
         return result
