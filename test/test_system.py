@@ -22,6 +22,12 @@ import yaml
 
 class SystemTest(TestCase):
 
+    HETZNER_API_TOKEN = os.environ['HETZNER_API_TOKEN']
+    DNSIMPLE_TEST_DOMAIN = os.environ['DNSIMPLE_TEST_DOMAIN']
+    DNSIMPLE_API_TOKEN = os.environ['DNSIMPLE_API_TOKEN']
+    DNSIMPLE_ACCOUNT_ID = os.environ['DNSIMPLE_ACCOUNT_ID']
+    TEST_REPO_URL = os.environ['TEST_REPO_URL']
+
     TEST_DIR = Path(__file__).parent
 
     SSH_PUBLIC_KEY = TEST_DIR / 'id_rsa.pub'
@@ -32,7 +38,7 @@ class SystemTest(TestCase):
     def setUpClass(cls):
         ssh_key_content = cls.SSH_PUBLIC_KEY.read_text().strip()
         cls.ssh_key = ensure_hetzner_ssh_key_exists(
-            os.environ['HETZNER_API_TOKEN'], ssh_key_content,
+            cls.HETZNER_API_TOKEN, ssh_key_content,
             f'djevops-test-{int(time())}'
         )
     
@@ -46,7 +52,7 @@ class SystemTest(TestCase):
     def setUp(self):
         self.server = self.dns_record = None
         self.test_name = f'djevops-test-{int(time())}'
-        self.test_domain = os.environ['DNSIMPLE_TEST_DOMAIN']
+        self.test_domain = self.DNSIMPLE_TEST_DOMAIN
         self.server_hostname = f'{self.test_name}.{self.test_domain}'
         with NamedTemporaryFile(delete=False) as known_hosts_file:
             self.known_hosts_file = known_hosts_file.name
@@ -60,11 +66,11 @@ class SystemTest(TestCase):
 
     def create_server(self):
         self.server = create_hetzner_server(
-            os.environ['HETZNER_API_TOKEN'], self.ssh_key, self.test_name
+            self.HETZNER_API_TOKEN, self.ssh_key, self.test_name
         )
         server_ip = self.server.public_net.ipv4.ip
         self.dns_record = DNSimpleARecord.create(
-            os.environ['DNSIMPLE_API_TOKEN'], os.environ['DNSIMPLE_ACCOUNT_ID'],
+            self.DNSIMPLE_API_TOKEN, self.DNSIMPLE_ACCOUNT_ID,
             self.test_domain, self.test_name, server_ip
         )
         wait_for_server_to_be_ready(
@@ -126,7 +132,7 @@ class SystemTest(TestCase):
             "This Git repository has no remotes. If you add one, don't forget "
             "to run `git push` after."
         )
-        git('remote', 'add', 'origin', os.environ['TEST_REPO_URL'])
+        git('remote', 'add', 'origin', self.TEST_REPO_URL)
         git('push', '-u', 'origin', self.test_name)
 
         init()
