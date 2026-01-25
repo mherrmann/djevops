@@ -1,16 +1,19 @@
 from djevops.config import get_services_users_envs, get_django_service
 from djevops.remote.scaffold import get_deploy_config, get_secrets
 from djevops.util import run_in_django_shell
-from subprocess import run
+from subprocess import run, PIPE, STDOUT
 
 import json
 
 MANAGE_SH = '/opt/djevops/bin/manage.sh'
 
 def install_python_deps():
-    pip = '/srv/venv/bin/pip'
-    run([pip, 'install', '-U', 'pip'], check=True)
-    run([pip, 'install', '-r', '/srv/app/requirements.txt'], check=True)
+    pip = lambda *args: run(
+        ['/srv/venv/bin/pip', *args],
+        stdout=PIPE, stderr=STDOUT, text=True, check=True
+    )
+    pip('install', '-U', 'pip')
+    pip('install', '-r', '/srv/app/requirements.txt')
 
 def migrate_db():
     _run_manage_sh('migrate')
