@@ -36,6 +36,8 @@ IMAP_HOST = os.environ['IMAP_HOST']
 EMAIL_USER = os.environ['EMAIL_USER']
 EMAIL_PASSWORD = os.environ['EMAIL_PASSWORD']
 
+GUNICORN_VERSION = '24.1.1'
+
 
 class _TestInTempDir(TestCase):
 
@@ -120,7 +122,7 @@ class OfflineTest(_DjevopsTest):
             'Please add `gunicorn` to your requirements.txt file.'
         )
         with open('requirements.txt', 'a') as f:
-            f.write('\ngunicorn==24.1.1')
+            f.write(f'\ngunicorn=={GUNICORN_VERSION}')
 
         self.expect_init_error('This directory is not a Git repository.')
         git('init', '-q', '-b', self.test_name)
@@ -188,61 +190,45 @@ class OnlineTest(_DjevopsTest):
 
     def setUp(self):
         super().setUp()
-        self.server = self.dns_record = None
-        self.server_hostname = f'{self.test_name}.{DNSIMPLE_TEST_DOMAIN}'
+
         with NamedTemporaryFile(delete=False) as known_hosts_file:
             self.known_hosts_file = known_hosts_file.name
+
+        self.server = create_hetzner_server(
+            HETZNER_API_TOKEN, self.ssh_key, self.test_name
+        )
+        self.server_ip = self.server.public_net.ipv4.ip
+        wait_for_server_to_be_ready(
+            'root', self.server_ip, self.SSH_PRIVATE_KEY, self.known_hosts_file
+        )
+
+        self.dns_record = DNSimpleARecord.create(
+            DNSIMPLE_API_TOKEN, DNSIMPLE_ACCOUNT_ID, DNSIMPLE_TEST_DOMAIN,
+            self.test_name, self.server_ip
+        )
+
         self.ssh_command = \
             f'ssh -i {self.SSH_PRIVATE_KEY} ' \
             f'-o UserKnownHostsFile={self.known_hosts_file}'
         os.environ['DJEVOPS_SSH_COMMAND'] = self.ssh_command
 
-    def create_server(self):
-        self.server = create_hetzner_server(
-            HETZNER_API_TOKEN, self.ssh_key, self.test_name
-        )
-        self.server_ip = self.server.public_net.ipv4.ip
-        self.dns_record = DNSimpleARecord.create(
-            DNSIMPLE_API_TOKEN, DNSIMPLE_ACCOUNT_ID, DNSIMPLE_TEST_DOMAIN,
-            self.test_name, self.server_ip
-        )
-        wait_for_server_to_be_ready(
-            'root', self.server_ip, self.SSH_PRIVATE_KEY, self.known_hosts_file
-        )
+        self.server_hostname = f'{self.test_name}.{DNSIMPLE_TEST_DOMAIN}'
+        self.init_test_app()
 
-    def ssh(self, cmd):
-        return run_silently(
-            f'{self.ssh_command} root@{self.server_ip} {quote(cmd)}', shell=True
-        )
-
-    def tearDown(self):
-        remove(self.known_hosts_file)
-        os.environ.pop('DJEVOPS_SSH_COMMAND')
-        if self.dns_record:
-            try:
-                self.dns_record.delete()
-            except Exception as e:
-                print(
-                    f'Warning: Failed to delete DNS record {self.dns_record}: '
-                    f'{e}'
-                )
-        if self.server:
-            try:
-                self.server.delete()
-            except Exception as e:
-                print(f'Warning: Failed to delete server {self.server}: {e}')
-        super().tearDown()
-
-    def test_setup(self):
-        OfflineTest().test_init()
-
-        with open('testapp/settings.py', 'a') as f:
-            f.write(
-                'import os\n'
-                'ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(" ")'
-            )
+    def init_test_app(self):
+        run_silently(['django-admin', 'startproject', 'testapp', '.'])
+        with open('requirements.txt', 'w') as f:
+            f.write(f'django=={django.get_version()}\n')
+            f.write(f'gunicorn=={GUNICORN_VERSION}')
+        git('init', '-q', '-b', self.test_name)
+        git('add', '.')
+        git('commit', '-m', 'Initial commit')
+        git('remote', 'add', 'origin', TEST_REPO_URL)
+        git('push', '-u', 'origin', self.test_name)
+        init()
 
         with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['server'] = self.server_ip
             deploy_yml['services']['web']['domains'] = [self.server_hostname]
             deploy_yml['services']['web']['env'] = {
                 'clear': {
@@ -250,10 +236,37 @@ class OnlineTest(_DjevopsTest):
                 }
             }
 
+        with open('testapp/settings.py', 'a') as f:
+            f.write(
+                'import os\n'
+                'ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(" ")'
+            )
+
         # TODO: Catch it when the necessary files are not committed.
         commit('testapp/settings.py', 'Set Django setting ALLOWED_HOSTS')
 
-        self.create_server()
+    def ssh(self, cmd):
+        return run_silently(
+            f'{self.ssh_command} root@{self.server_ip} {quote(cmd)}', shell=True
+        )
+
+    def tearDown(self):
+        os.environ.pop('DJEVOPS_SSH_COMMAND')
+        try:
+            self.dns_record.delete()
+        except Exception as e:
+            print(
+                f'Warning: Failed to delete DNS record {self.dns_record}: '
+                f'{e}'
+            )
+        try:
+            self.server.delete()
+        except Exception as e:
+            print(f'Warning: Failed to delete server {self.server}: {e}')
+        remove(self.known_hosts_file)
+        super().tearDown()
+
+    def test_setup(self):
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['server'] = self.server_ip
 
