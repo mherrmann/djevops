@@ -90,12 +90,12 @@ class _DjevopsTest(_TestInTempDir):
         with open('djevops/deploy.yml', 'w') as f:
             f.write(yaml.dump(deploy_yml))
 
-    def add_to_settings(self, lines, commit=True):
+    def add_to_settings(self, lines, do_commit=True):
         settings_py = f'{self.DJANGO_PROJECT_NAME}/settings.py'
         with open(settings_py, 'a') as f:
             f.write('\n' + '\n'.join(lines))
-        if commit:
-            commit_and_push(settings_py, 'Add to settings.py')
+        if do_commit:
+            commit(settings_py, 'Add to settings.py')
 
     def delete_remote_branch_if_exists(self, name):
         try:
@@ -264,7 +264,7 @@ class OnlineTest(_DjevopsTest):
             "import os",
             "ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(' ')",
             f"INSTALLED_APPS += [{self.DJANGO_APP_NAME!r}]"
-        ], commit=False)
+        ], do_commit=False)
         git('init', '-q', '-b', self.test_name)
         git('add', '.')
         git('commit', '-m', 'Initial commit')
@@ -335,6 +335,7 @@ class OnlineTest(_DjevopsTest):
             "or DATABASES['default']['NAME']"
         ])
 
+        git('push')
         setup(VERBOSE)
 
         # Test that the `web` user can write to the database:
@@ -356,6 +357,7 @@ class OnlineTest(_DjevopsTest):
             f.write(f'EMAIL_USER = {EMAIL_USER!r}\n')
             f.write(f'EMAIL_PASSWORD = {EMAIL_PASSWORD!r}\n')
 
+        git('push')
         setup(VERBOSE)
 
         send_mail_script = (
@@ -384,8 +386,9 @@ class OnlineTest(_DjevopsTest):
         test_txt.parent.mkdir(parents=True)
         test_content = 'Hello from static file'
         test_txt.write_text(test_content)
-        commit_and_push(test_txt, 'Add static file')
+        commit(test_txt, 'Add static file')
 
+        git('push')
         setup(VERBOSE)
 
         response = \
@@ -458,12 +461,11 @@ def wait_for_server_to_be_ready(
     else:
         raise TimeoutError(f'Server not ready after {timeout_secs} seconds')
 
-def commit_and_push(file_path, message):
+def commit(file_path, message):
     if isinstance(file_path, Path):
         file_path = str(file_path)
     git('add', file_path)
     git('commit', '-m', message)
-    git('push')
 
 def wait_for_email(
     imap_host, user, password, subject, delete=False, timeout_secs=60
