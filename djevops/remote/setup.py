@@ -112,6 +112,7 @@ def main():
     admin_email = None
     service_domains = {}
     services_users_envs = get_services_users_envs(config, secrets)
+    gunicorns = []
     for service_name, (user, env) in services_users_envs.items():
         if user not in created_users:
             ensure_group_exists(user)
@@ -138,6 +139,7 @@ def main():
                     if not isinstance(admin_email, str):
                         admin_email = admin_email[1]
             supervisor_conf_file = 'gunicorn.conf'
+            gunicorns.append(service_name)
             nginx_available_file = '/etc/nginx/sites-available/' + service_name
             copy_with_replace(
                 '/opt/djevops/conf/nginx/django', nginx_available_file,
@@ -305,6 +307,8 @@ def main():
     log('Starting services...')
     _run('supervisorctl reread')
     _run('supervisorctl update')
+    for gunicorn in gunicorns:
+        _run(f'supervisorctl signal HUP {gunicorn}', ignore_errors=(7,))
     _run('service nginx restart')
 
     log(f'The server is now serving requests at {host_name}!')

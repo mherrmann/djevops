@@ -38,7 +38,7 @@ EMAIL_PASSWORD = os.environ['EMAIL_PASSWORD']
 
 GUNICORN_VERSION = '24.1.1'
 
-VERBOSE = True
+VERBOSE = False
 
 
 class _TestInTempDir(TestCase):
@@ -219,9 +219,16 @@ class OnlineTest(_DjevopsTest):
 
     def init_test_app(self):
         run_silently(['django-admin', 'startproject', 'testapp', '.'])
+        run_silently(['python', 'manage.py', 'startapp', 'myapp'])
         with open('requirements.txt', 'w') as f:
             f.write(f'django=={django.get_version()}\n')
             f.write(f'gunicorn=={GUNICORN_VERSION}')
+        with open('testapp/settings.py', 'a') as f:
+            f.write('\n'.join([
+                "import os",
+                "ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(' ')",
+                "INSTALLED_APPS += ['myapp']"
+            ]))
         git('init', '-q', '-b', self.test_name)
         git('add', '.')
         git('commit', '-m', 'Initial commit')
@@ -237,11 +244,6 @@ class OnlineTest(_DjevopsTest):
                     'ALLOWED_HOSTS': self.server_hostname
                 }
             }
-
-        self._add_to_settings([
-            'import os',
-            'ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(" ")'
-        ])
 
     def ssh(self, cmd):
         return run_silently(
@@ -272,6 +274,7 @@ class OnlineTest(_DjevopsTest):
         self._test_web_access()
         self._test_db()
         self._test_email()
+        self._test_static_files()
 
     def _test_web_access(self):
         setup(VERBOSE)
@@ -331,6 +334,28 @@ class OnlineTest(_DjevopsTest):
             IMAP_HOST, EMAIL_USER, EMAIL_PASSWORD, self.test_name, delete=True
         )
         self.assertTrue(email_found, 'Test email was not received')
+
+    def _test_static_files(self):
+        self._add_to_settings([
+            "DEBUG = os.getenv('DEBUG') == 'True'",
+            "STATIC_ROOT = os.getenv('STATIC_ROOT')"
+        ])
+        with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['services']['web']['env']['clear']['DEBUG'] = 'False'
+
+        test_txt = Path('myapp/static/myapp/test.txt')
+        test_txt.parent.mkdir(parents=True)
+        test_content = 'Hello from static file'
+        test_txt.write_text(test_content)
+        commit(test_txt, 'Add static file')
+
+        setup(VERBOSE)
+
+        response = requests.get(
+            f'https://{self.server_hostname}/static/myapp/test.txt'
+        )
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(test_content, response.text)
 
     def _add_to_settings(self, lines):
         with open('testapp/settings.py', 'a') as f:
@@ -403,6 +428,8 @@ def wait_for_server_to_be_ready(
         raise TimeoutError(f'Server not ready after {timeout_secs} seconds')
 
 def commit(file_path, message):
+    if isinstance(file_path, Path):
+        file_path = str(file_path)
     git('add', file_path)
     git('commit', '-m', message)
     git('push')

@@ -15,7 +15,7 @@ def migrate_db():
     _run_manage_sh('migrate')
 
 def collect_static_files():
-    static_root = get_django_setting('STATIC_ROOT', {})
+    static_root = get_django_setting('STATIC_ROOT')
     if static_root:
         _run_manage_sh('collectstatic', '--noinput')
 
