@@ -58,14 +58,6 @@ class _DjevopsTest(_TestInTempDir):
     DJANGO_PROJECT_NAME = 'testproject'
     DJANGO_APP_NAME = 'testapp'
 
-    def __init__(self, *args, **kwargs):
-        self.test_name = f'djevops-test-{int(time())}'
-        super().__init__(*args, **kwargs)
-
-    def tearDown(self):
-        self.delete_remote_branch_if_exists(self.test_name)
-        super().tearDown()
-
     def expect_init_error(self, message):
         with self._expect_command_error(message):
             init()
@@ -96,19 +88,6 @@ class _DjevopsTest(_TestInTempDir):
             f.write('\n' + '\n'.join(lines))
         if do_commit:
             commit(settings_py, 'Add to settings.py')
-
-    def delete_remote_branch_if_exists(self, name):
-        try:
-            git('branch', '--show-current')
-        except CalledProcessError as no_git_repo:
-            pass
-        else:
-            try:
-                git('remote', 'get-url', 'origin')
-            except CalledProcessError as no_remote:
-                pass
-            else:
-                git('push', 'origin', '--delete', name)
 
     @contextmanager
     def _expect_command_error(self, message):
@@ -145,7 +124,7 @@ class OfflineTest(_DjevopsTest):
             f.write(f'\ngunicorn=={GUNICORN_VERSION}')
 
         self.expect_init_error('This directory is not a Git repository.')
-        git('init', '-q', '-b', self.test_name)
+        git('init', '-q')
         git('add', '.')
         git('commit', '-m', 'Initial commit')
 
@@ -153,8 +132,7 @@ class OfflineTest(_DjevopsTest):
             "This Git repository has no remotes. If you add one, don't forget "
             "to run `git push` after."
         )
-        git('remote', 'add', 'origin', TEST_REPO_URL)
-        git('push', '-u', 'origin', self.test_name)
+        git('remote', 'add', 'origin', 'https://example.com/repo.git')
 
         init()
 
@@ -230,6 +208,8 @@ class OnlineTest(_DjevopsTest):
     def setUp(self):
         super().setUp()
 
+        self.test_name = f'djevops-test-{int(time())}'
+
         with NamedTemporaryFile(delete=False) as known_hosts_file:
             self.known_hosts_file = known_hosts_file.name
 
@@ -286,7 +266,14 @@ class OnlineTest(_DjevopsTest):
             f'{self.ssh_command} root@{self.server_ip} {quote(cmd)}', shell=True
         )
 
+    def delete_remote_branch_if_exists(self, name):
+        try:
+            git('push', 'origin', '--delete', name)
+        except CalledProcessError:
+            pass
+
     def tearDown(self):
+        self.delete_remote_branch_if_exists(self.test_name)
         os.environ.pop('DJEVOPS_SSH_COMMAND')
         try:
             self.dns_record.delete()
