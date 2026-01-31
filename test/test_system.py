@@ -238,14 +238,10 @@ class OnlineTest(_DjevopsTest):
                 }
             }
 
-        with open('testapp/settings.py', 'a') as f:
-            f.write(
-                'import os\n'
-                'ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(" ")'
-            )
-
-        # TODO: Catch it when the necessary files are not committed.
-        commit('testapp/settings.py', 'Set Django setting ALLOWED_HOSTS')
+        self._add_to_settings([
+            'import os',
+            'ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(" ")'
+        ])
 
     def ssh(self, cmd):
         return run_silently(
@@ -295,14 +291,10 @@ class OnlineTest(_DjevopsTest):
             "    os.getenv('SQLITE_DB_FILE') or <what you had before>"
         )
 
-        with open('testapp/settings.py', 'a') as f:
-            f.write(
-                "\n"
-                "DATABASES['default']['NAME'] = os.getenv('SQLITE_DB_FILE') "
-                "or DATABASES['default']['NAME']"
-            )
-
-        commit('testapp/settings.py', 'Configure SQLite db file path')
+        self._add_to_settings([
+            "DATABASES['default']['NAME'] = os.getenv('SQLITE_DB_FILE') "
+            "or DATABASES['default']['NAME']"
+        ])
 
         setup(VERBOSE)
 
@@ -339,6 +331,12 @@ class OnlineTest(_DjevopsTest):
             IMAP_HOST, EMAIL_USER, EMAIL_PASSWORD, self.test_name, delete=True
         )
         self.assertTrue(email_found, 'Test email was not received')
+
+    def _add_to_settings(self, lines):
+        with open('testapp/settings.py', 'a') as f:
+            f.write('\n' + '\n'.join(lines))
+        commit('testapp/settings.py', 'Add to settings.py')
+
 
 def ensure_hetzner_ssh_key_exists(api_token, ssh_key_content, name):
     hetzner = HetznerClient(token=api_token)
