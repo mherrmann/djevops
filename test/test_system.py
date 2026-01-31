@@ -9,7 +9,7 @@ from hcloud._exceptions import APIException
 from hcloud.images import Image
 from hcloud.server_types import ServerType
 from imaplib import IMAP4_SSL
-from os import remove, chdir
+from os import chdir, remove
 from pathlib import Path
 from shlex import quote
 from subprocess import DEVNULL, run, CalledProcessError
@@ -17,6 +17,7 @@ from tempfile import NamedTemporaryFile, TemporaryDirectory
 from time import time, sleep
 from unittest import TestCase
 
+import celery
 import django
 import os
 import requests
@@ -287,6 +288,7 @@ class OnlineTest(_DjevopsTest):
         self._test_db()
         self._test_email()
         self._test_static_files()
+        self._test_celery()
 
     def _test_web_access(self):
         setup(VERBOSE)
@@ -371,6 +373,66 @@ class OnlineTest(_DjevopsTest):
             requests.get(f'https://{self.server_hostname}/{test_txt_relpath}')
         self.assertEqual(200, response.status_code)
         self.assertEqual(test_content, response.text)
+
+    def _test_celery(self):
+        with open('requirements.txt', 'a') as f:
+            f.write(f'\ncelery[redis]=={celery.__version__}')
+        commit('requirements.txt', 'Add celery')
+
+        with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['services']['celery'] = {
+                'type': 'celery',
+                'env': {'inherit': 'web'}
+            }
+            deploy_yml['redis'] = None
+
+        self.add_to_settings([
+            f"CELERY_BROKER_URL = 'redis://localhost'",
+            f"CELERY_RESULT_BACKEND = 'redis://localhost'"
+        ])
+
+        proj = self.DJANGO_PROJECT_NAME
+        celery_py = Path(proj) / 'celery.py'
+        celery_py.write_text('\n'.join([
+            'import os',
+            'import django',
+            'from celery import Celery',
+            f"os.environ.setdefault('DJANGO_SETTINGS_MODULE', '{proj}.settings')",
+            'django.setup()',
+            f"app = Celery('{proj}')",
+            "app.config_from_object('django.conf:settings', namespace='CELERY')",
+            'app.autodiscover_tasks()',
+        ]))
+        commit(celery_py, 'Add celery.py')
+
+        init_py = Path(proj) / '__init__.py'
+        init_py.write_text('from .celery import app as celery_app')
+        commit(init_py, 'Add __init__.py')
+
+        tasks_py = Path(self.DJANGO_APP_NAME) / 'tasks.py'
+        tasks_py.write_text('\n'.join([
+            'from celery import shared_task',
+            '@shared_task',
+            'def test_task():',
+            "    return 'celery works'",
+        ]))
+        commit(tasks_py, 'Add celery task')
+
+        core_init = Path('core/__init__.py')
+        core_init.parent.mkdir(parents=True)
+        core_init.write_text(f'from {proj}.celery import app\n')
+        commit(core_init, 'Add core module for celery -A core')
+
+        git('push')
+        setup(VERBOSE)
+
+        run_task_script = (
+            f'from {self.DJANGO_APP_NAME}.tasks import test_task; '
+            'result = test_task.delay(); '
+            'print(result.get(timeout=10))'
+        )
+        output = self._ssh(f"{MANAGE_SH} shell -c {quote(run_task_script)}")
+        self.assertIn('celery works', output)
 
     def _ssh(self, cmd):
         return run_silently(

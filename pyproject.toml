@@ -8,6 +8,7 @@ dependencies = ["PyYAML==6.0.3"]
 
 [project.optional-dependencies]
 test = [
+    "celery==5.5.3",
     "django==5.1.2",
     "dnsimple==2.15.0",
     "hcloud==2.13.0",
