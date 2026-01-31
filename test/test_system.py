@@ -55,6 +55,9 @@ class _TestInTempDir(TestCase):
 
 class _DjevopsTest(_TestInTempDir):
 
+    DJANGO_PROJECT_NAME = 'testproject'
+    DJANGO_APP_NAME = 'testapp'
+
     def __init__(self, *args, **kwargs):
         self.test_name = f'djevops-test-{int(time())}'
         super().__init__(*args, **kwargs)
@@ -64,18 +67,20 @@ class _DjevopsTest(_TestInTempDir):
         super().tearDown()
 
     def expect_init_error(self, message):
-        with self.expect_command_error(message):
+        with self._expect_command_error(message):
             init()
 
     def expect_setup_error(self, message):
-        with self.expect_command_error(message):
+        with self._expect_command_error(message):
             setup(VERBOSE)
 
-    @contextmanager
-    def expect_command_error(self, message):
-        with self.assertRaises(CommandError) as cm:
-            yield
-        self.assertEqual(message, cm.exception.args[0])
+    def start_django_project(self):
+        run_silently([
+            'django-admin', 'startproject', self.DJANGO_PROJECT_NAME, '.'
+        ])
+
+    def start_django_app(self):
+        run_silently(['python', 'manage.py', 'startapp', self.DJANGO_APP_NAME])
 
     @contextmanager
     def update_deploy_yml(self):
@@ -84,6 +89,13 @@ class _DjevopsTest(_TestInTempDir):
         yield deploy_yml
         with open('djevops/deploy.yml', 'w') as f:
             f.write(yaml.dump(deploy_yml))
+
+    def add_to_settings(self, lines, commit=True):
+        settings_py = f'{self.DJANGO_PROJECT_NAME}/settings.py'
+        with open(settings_py, 'a') as f:
+            f.write('\n' + '\n'.join(lines))
+        if commit:
+            commit_and_push(settings_py, 'Add to settings.py')
 
     def delete_remote_branch_if_exists(self, name):
         try:
@@ -98,6 +110,12 @@ class _DjevopsTest(_TestInTempDir):
             else:
                 git('push', 'origin', '--delete', name)
 
+    @contextmanager
+    def _expect_command_error(self, message):
+        with self.assertRaises(CommandError) as cm:
+            yield
+        self.assertEqual(message, cm.exception.args[0])
+
 
 class OfflineTest(_DjevopsTest):
 
@@ -106,7 +124,7 @@ class OfflineTest(_DjevopsTest):
             'There is no manage.py file in the current directory. Do you '
             'already have a Django project?'
         )
-        run_silently(['django-admin', 'startproject', 'testapp', '.'])
+        self.start_django_project()
 
         self.expect_init_error(
             'Please create a requirements.txt file. For example, by running:\n'
@@ -167,6 +185,25 @@ class OfflineTest(_DjevopsTest):
             '          ALLOWED_HOSTS: my.website.com'
         )
 
+        with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['services']['web']['domains'] = ['example.com']
+            deploy_yml['services']['web']['env'] = {
+                'clear': {'ALLOWED_HOSTS': 'example.com'}
+            }
+        self.add_to_settings([
+            "import os",
+            "ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(' ')",
+            "STATIC_ROOT = '/some/hardcoded/path'"
+        ])
+
+        self.expect_setup_error(
+            'Please set Django setting STATIC_ROOT to the value of '
+            'environment variable STATIC_ROOT. For example, in '
+            'settings.py:\n\n'
+            '    import os\n'
+            '    STATIC_ROOT = os.getenv("STATIC_ROOT")'
+        )
+
 
 class OnlineTest(_DjevopsTest):
 
@@ -218,17 +255,16 @@ class OnlineTest(_DjevopsTest):
         self.init_test_app()
 
     def init_test_app(self):
-        run_silently(['django-admin', 'startproject', 'testapp', '.'])
-        run_silently(['python', 'manage.py', 'startapp', 'myapp'])
+        self.start_django_project()
+        self.start_django_app()
         with open('requirements.txt', 'w') as f:
             f.write(f'django=={django.get_version()}\n')
             f.write(f'gunicorn=={GUNICORN_VERSION}')
-        with open('testapp/settings.py', 'a') as f:
-            f.write('\n'.join([
-                "import os",
-                "ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(' ')",
-                "INSTALLED_APPS += ['myapp']"
-            ]))
+        self.add_to_settings([
+            "import os",
+            "ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(' ')",
+            f"INSTALLED_APPS += [{self.DJANGO_APP_NAME!r}]"
+        ], commit=False)
         git('init', '-q', '-b', self.test_name)
         git('add', '.')
         git('commit', '-m', 'Initial commit')
@@ -294,7 +330,7 @@ class OnlineTest(_DjevopsTest):
             "    os.getenv('SQLITE_DB_FILE') or <what you had before>"
         )
 
-        self._add_to_settings([
+        self.add_to_settings([
             "DATABASES['default']['NAME'] = os.getenv('SQLITE_DB_FILE') "
             "or DATABASES['default']['NAME']"
         ])
@@ -336,31 +372,26 @@ class OnlineTest(_DjevopsTest):
         self.assertTrue(email_found, 'Test email was not received')
 
     def _test_static_files(self):
-        self._add_to_settings([
+        self.add_to_settings([
             "DEBUG = os.getenv('DEBUG') == 'True'",
             "STATIC_ROOT = os.getenv('STATIC_ROOT')"
         ])
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['services']['web']['env']['clear']['DEBUG'] = 'False'
 
-        test_txt = Path('myapp/static/myapp/test.txt')
+        test_txt_relpath = f'static/{self.DJANGO_APP_NAME}/test.txt'
+        test_txt = Path(self.DJANGO_APP_NAME) / test_txt_relpath
         test_txt.parent.mkdir(parents=True)
         test_content = 'Hello from static file'
         test_txt.write_text(test_content)
-        commit(test_txt, 'Add static file')
+        commit_and_push(test_txt, 'Add static file')
 
         setup(VERBOSE)
 
-        response = requests.get(
-            f'https://{self.server_hostname}/static/myapp/test.txt'
-        )
+        response = \
+            requests.get(f'https://{self.server_hostname}/{test_txt_relpath}')
         self.assertEqual(200, response.status_code)
         self.assertEqual(test_content, response.text)
-
-    def _add_to_settings(self, lines):
-        with open('testapp/settings.py', 'a') as f:
-            f.write('\n' + '\n'.join(lines))
-        commit('testapp/settings.py', 'Add to settings.py')
 
 
 def ensure_hetzner_ssh_key_exists(api_token, ssh_key_content, name):
@@ -427,7 +458,7 @@ def wait_for_server_to_be_ready(
     else:
         raise TimeoutError(f'Server not ready after {timeout_secs} seconds')
 
-def commit(file_path, message):
+def commit_and_push(file_path, message):
     if isinstance(file_path, Path):
         file_path = str(file_path)
     git('add', file_path)

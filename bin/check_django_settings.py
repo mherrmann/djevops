@@ -5,8 +5,21 @@ import sys
 
 def main(domains, has_db):
     check_allowed_hosts(domains)
+    check_staticfiles()
     if has_db:
         check_databases()
+
+def check_staticfiles():
+    if 'django.contrib.staticfiles' in settings.INSTALLED_APPS:
+        static_root = settings.STATIC_ROOT
+        if static_root and static_root != os.getenv('STATIC_ROOT'):
+            error(
+                'Please set Django setting STATIC_ROOT to the value of '
+                'environment variable STATIC_ROOT. For example, in '
+                'settings.py:\n\n'
+                '    import os\n'
+                '    STATIC_ROOT = os.getenv("STATIC_ROOT")'
+            )
 
 def check_allowed_hosts(domains):
     # TODO: Allow wildcards in ALLOWED_HOSTS.

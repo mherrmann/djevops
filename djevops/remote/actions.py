@@ -15,8 +15,10 @@ def migrate_db():
     _run_manage_sh('migrate')
 
 def collect_static_files():
-    static_root = get_django_setting('STATIC_ROOT')
-    if static_root:
+    installed_apps = get_django_setting('INSTALLED_APPS')
+    if 'django.contrib.staticfiles' not in installed_apps:
+        return
+    if get_django_setting('STATIC_ROOT'):
         _run_manage_sh('collectstatic', '--noinput')
 
 def get_django_setting(setting_name, env=None):
