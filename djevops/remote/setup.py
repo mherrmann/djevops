@@ -38,17 +38,14 @@ def main():
     else:
         git_repo_url = f'https://{git_server}/{git_repo_name}.git'
 
-    log('Setting hostname...')
-    _run(['hostnamectl', 'set-hostname', host_name])
+    if _run('hostname') != host_name:
+        log('Setting hostname...')
+        _run(['hostnamectl', 'set-hostname', host_name])
 
     log('Installing git...')
     install('git-core')
 
-    log('Configuring git to avoid warnings when pulling...')
-    # TODO: Maybe this should be in the repo only?
-    _run('git config --global pull.rebase true')
-
-    if git_repo_key:
+    if git_repo_key and not exists('/root/.ssh/id_rsa'):
         log('Setting up SSH keys for cloning the Git repository...')
         git_key = secrets[git_repo_key]
         makedirs('/root/.ssh', exist_ok=True)
@@ -58,16 +55,28 @@ def main():
         _run('ssh-keygen -y -f /root/.ssh/id_rsa > /root/.ssh/id_rsa.pub')
         chmod('/root/.ssh/id_rsa.pub', 0o644)
 
-    log('Adding git repository server to known hosts...')
-    _run(f'ssh-keyscan -H {git_server} > /root/.ssh/known_hosts 2>/dev/null')
-    chmod('/root/.ssh/known_hosts', 0o600)
-
-    log('Cloning the repository...')
     try:
-        rmtree('/srv/app')
+        with open('/root/.ssh/known_hosts') as f:
+            need_to_add_to_known_hosts = git_server not in f.read()
     except FileNotFoundError:
-        pass
-    _run(f'git clone -q -b {git_repo_branch} {git_repo_url} /srv/app')
+        need_to_add_to_known_hosts = True
+    if need_to_add_to_known_hosts:
+        log('Adding git repository server to known hosts...')
+        _run(
+            f'ssh-keyscan -H {git_server} > /root/.ssh/known_hosts 2>/dev/null'
+        )
+        chmod('/root/.ssh/known_hosts', 0o600)
+
+    try:
+        _run('git -C /srv/app fetch origin')
+        _run(f'git -C /srv/app reset --hard origin/{git_repo_branch}')
+    except CalledProcessError:
+        log('Cloning the repository...')
+        try:
+            rmtree('/srv/app')
+        except FileNotFoundError:
+            pass
+        _run(f'git clone -q -b {git_repo_branch} {git_repo_url} /srv/app')
 
     log('Setting up .bash_profile for root...')
     symlink_force('/opt/djevops/conf/.bash_profile', '/root/.bash_profile')
@@ -78,8 +87,9 @@ def main():
     log('Installing OS dependencies for our Python environment...')
     install('python3-venv')
 
-    log('Creating virtual environment...')
-    _run('python3 -m venv /srv/venv')
+    if not exists('/srv/venv'):
+        log('Creating virtual environment...')
+        _run('python3 -m venv /srv/venv')
 
     log('Installing Python dependencies...')
     install_python_deps()
@@ -165,14 +175,18 @@ def main():
 
     # Make a self-signed certificate just so we can serve SSL for requests with
     # incorrect host names.
-    makedirs('/etc/nginx/certs/default', exist_ok=True)
-    _run([
-        'openssl', 'req', '-x509', '-nodes', '-newkey', 'rsa:2048',
-        '-keyout', '/etc/nginx/certs/default/privkey.pem',
-        '-out', '/etc/nginx/certs/default/fullchain.pem',
-        '-days', '36500',
-        '-subj', '/CN=default.invalid'
-    ])
+    self_signed_cert_privkey = '/etc/nginx/certs/default/privkey.pem'
+    if not exists(self_signed_cert_privkey):
+        log('Creating self-signed certificate...')
+        makedirs('/etc/nginx/certs/default', exist_ok=True)
+        _run([
+            'openssl', 'req', '-x509', '-nodes', '-newkey', 'rsa:2048',
+            '-keyout', self_signed_cert_privkey,
+            '-out', '/etc/nginx/certs/default/fullchain.pem',
+            '-days', '36500',
+            '-subj', '/CN=default.invalid'
+        ])
+
     copyfile(
         '/opt/djevops/conf/nginx/default', '/etc/nginx/sites-available/default'
     )
@@ -360,7 +374,7 @@ def _run(cmd, ignore_errors=(), env=None):
         return run(
             cmd, shell=shell, stdout=PIPE, stderr=STDOUT, text=True, check=True,
             env=env
-        )
+        ).stdout.strip()
     except CalledProcessError as e:
         if e.returncode not in ignore_errors:
             raise
