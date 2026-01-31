@@ -1,10 +1,12 @@
 from djevops.config import get_services_users_envs, get_django_service
 from djevops.util import git, get_apt_install_cmd, run_in_django_shell, \
     run_silently
+from functools import partial
 from os import remove, makedirs
 from os.path import dirname, exists, join
 from runpy import run_path
 from shlex import quote
+from subprocess import run
 from tempfile import NamedTemporaryFile
 from urllib.parse import urlparse
 
@@ -81,7 +83,7 @@ def init():
     with open('djevops/deploy.yml', 'w') as f:
         f.write(yaml.dump(deploy_yml))
 
-def setup():
+def setup(verbose=False):
     deploy_yml = 'djevops/deploy.yml'
     with open(deploy_yml) as f:
         deploy_config = yaml.safe_load(f)
@@ -90,7 +92,7 @@ def setup():
     check_config(deploy_config, secrets)
 
     server = deploy_config['server']
-    install_djevops_on_server('root', server)
+    install_djevops_on_server('root', server, verbose)
     rsync('-a', deploy_yml, f'root@{server}:/root/deploy.yml')
 
     secrets_json = NamedTemporaryFile(mode='w', delete=False, suffix='.json')
@@ -101,7 +103,9 @@ def setup():
     finally:
         remove(secrets_json.name)
 
-    run_with_djevops_venv('root', server, 'python -m djevops.remote.setup')
+    run_with_djevops_venv(
+        'root', server, 'python -m djevops.remote.setup', verbose
+    )
 
 def check_config(deploy_config, secrets):
     server = deploy_config.get('server')
@@ -149,8 +153,8 @@ def check_config(deploy_config, secrets):
     if error_msg:
         raise CommandError(error_msg)
 
-def install_djevops_on_server(user, host):
-    ssh_ = lambda cmd: ssh(user, host, cmd)
+def install_djevops_on_server(user, host, verbose):
+    ssh_ = lambda cmd: ssh(user, host, cmd, verbose)
     ssh_(get_apt_install_cmd('rsync'))
     ssh_(
         'command -v uv >/dev/null 2>&1 || '
@@ -173,17 +177,20 @@ def get_secrets(path):
         k: v for k, v in run_path(path).items() if re.match(SECRETS_NAME_RE, k)
     }
 
-def run_with_djevops_venv(user, host, cmd):
-    ssh(user, host, f'~/.local/bin/uv run --project /opt/djevops {cmd}')
+def run_with_djevops_venv(user, host, cmd, verbose):
+    ssh(
+        user, host, f'~/.local/bin/uv run --project /opt/djevops {cmd}', verbose
+    )
 
 def rsync(*args):
     ssh_cmd = get_ssh_command()
     extra_rsync_args = [] if ssh_cmd == 'ssh' else ['-e', ssh_cmd]
     run_silently(['rsync', *extra_rsync_args, *args])
 
-def ssh(user, host, cmd):
+def ssh(user, host, cmd, verbose):
     ssh_cmd = get_ssh_command()
-    return run_silently(f'{ssh_cmd} {user}@{host} {quote(cmd)}', shell=True)
+    run_ = partial(run, check=True) if verbose else run_silently
+    run_(f'{ssh_cmd} {user}@{host} {quote(cmd)}', shell=True)
 
 def get_ssh_command():
     try:
@@ -192,15 +199,16 @@ def get_ssh_command():
         return 'ssh'
 
 if __name__ == '__main__':
-    if len(sys.argv) != 2:
-        print('Usage: djevops init|setup')
+    if len(sys.argv) < 2 or len(sys.argv) > 3:
+        print('Usage: djevops init|setup [--verbose]')
         sys.exit(0)
     command = sys.argv[1]
+    verbose = len(sys.argv) == 3 and sys.argv[2] == '--verbose'
     try:
         if command == 'init':
             init()
         elif command == 'setup':
-            setup()
+            setup(verbose)
         else:
             raise CommandError(f'Unknown command: {command}')
     except CommandError as e:
