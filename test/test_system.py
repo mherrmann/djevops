@@ -38,6 +38,8 @@ EMAIL_PASSWORD = os.environ['EMAIL_PASSWORD']
 
 GUNICORN_VERSION = '24.1.1'
 
+VERBOSE = True
+
 
 class _TestInTempDir(TestCase):
 
@@ -67,7 +69,7 @@ class _DjevopsTest(_TestInTempDir):
 
     def expect_setup_error(self, message):
         with self.expect_command_error(message):
-            setup()
+            setup(VERBOSE)
 
     @contextmanager
     def expect_command_error(self, message):
@@ -276,7 +278,7 @@ class OnlineTest(_DjevopsTest):
         self._test_email()
 
     def _test_web_access(self):
-        setup()
+        setup(VERBOSE)
 
         response = requests.get(f'https://{self.server_hostname}')
         self.assertEqual(response.status_code, 200)
@@ -302,7 +304,7 @@ class OnlineTest(_DjevopsTest):
 
         commit('testapp/settings.py', 'Configure SQLite db file path')
 
-        setup()
+        setup(VERBOSE)
 
         # Test that the `web` user can write to the database:
         create_superuser_cmd = (
@@ -323,7 +325,7 @@ class OnlineTest(_DjevopsTest):
             f.write(f'EMAIL_USER = {EMAIL_USER!r}\n')
             f.write(f'EMAIL_PASSWORD = {EMAIL_PASSWORD!r}\n')
 
-        setup()
+        setup(VERBOSE)
 
         send_mail_script = (
             f'from django.core.mail import send_mail; '
