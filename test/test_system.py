@@ -234,6 +234,23 @@ class OnlineTest(_DjevopsTest):
         self.server_hostname = f'{self.test_name}.{DNSIMPLE_TEST_DOMAIN}'
         self.init_test_app()
 
+    def tearDown(self):
+        self._delete_remote_branch_if_exists(self.test_name)
+        os.environ.pop('DJEVOPS_SSH_COMMAND')
+        try:
+            self.dns_record.delete()
+        except Exception as e:
+            print(
+                f'Warning: Failed to delete DNS record {self.dns_record}: '
+                f'{e}'
+            )
+        try:
+            self.server.delete()
+        except Exception as e:
+            print(f'Warning: Failed to delete server {self.server}: {e}')
+        remove(self.known_hosts_file)
+        super().tearDown()
+
     def init_test_app(self):
         self.start_django_project()
         self.start_django_app()
@@ -260,34 +277,6 @@ class OnlineTest(_DjevopsTest):
                     'ALLOWED_HOSTS': self.server_hostname
                 }
             }
-
-    def ssh(self, cmd):
-        return run_silently(
-            f'{self.ssh_command} root@{self.server_ip} {quote(cmd)}', shell=True
-        )
-
-    def delete_remote_branch_if_exists(self, name):
-        try:
-            git('push', 'origin', '--delete', name)
-        except CalledProcessError:
-            pass
-
-    def tearDown(self):
-        self.delete_remote_branch_if_exists(self.test_name)
-        os.environ.pop('DJEVOPS_SSH_COMMAND')
-        try:
-            self.dns_record.delete()
-        except Exception as e:
-            print(
-                f'Warning: Failed to delete DNS record {self.dns_record}: '
-                f'{e}'
-            )
-        try:
-            self.server.delete()
-        except Exception as e:
-            print(f'Warning: Failed to delete server {self.server}: {e}')
-        remove(self.known_hosts_file)
-        super().tearDown()
 
     def test_setup(self):
         # It would be nicer to run these as separate test_ methods, but it would
@@ -330,7 +319,7 @@ class OnlineTest(_DjevopsTest):
             "DJANGO_SUPERUSER_USERNAME=admin DJANGO_SUPERUSER_PASSWORD=admin "
             f"{MANAGE_SH} createsuperuser --email admin@admin.com --noinput"
         )
-        self.ssh(f"su -c '{create_superuser_cmd}' - web")
+        self._ssh(f"su -c '{create_superuser_cmd}' - web")
 
     def _test_email(self):
         with self.update_deploy_yml() as deploy_yml:
@@ -353,7 +342,7 @@ class OnlineTest(_DjevopsTest):
             f'{EMAIL_USER!r}, [{EMAIL_USER!r}])'
         )
         remote_cmd = f"{MANAGE_SH} shell -c {quote(send_mail_script)}"
-        self.ssh(remote_cmd)
+        self._ssh(remote_cmd)
 
         email_found = wait_for_email(
             IMAP_HOST, EMAIL_USER, EMAIL_PASSWORD, self.test_name, delete=True
@@ -383,6 +372,16 @@ class OnlineTest(_DjevopsTest):
         self.assertEqual(200, response.status_code)
         self.assertEqual(test_content, response.text)
 
+    def _ssh(self, cmd):
+        return run_silently(
+            f'{self.ssh_command} root@{self.server_ip} {quote(cmd)}', shell=True
+        )
+
+    def _delete_remote_branch_if_exists(self, name):
+        try:
+            git('push', 'origin', '--delete', name)
+        except CalledProcessError:
+            pass
 
 def ensure_hetzner_ssh_key_exists(api_token, ssh_key_content, name):
     hetzner = HetznerClient(token=api_token)
