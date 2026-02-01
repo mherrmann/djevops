@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from djevops.__main__ import CommandError, init, setup
+from djevops.__main__ import CommandError, init, deploy
 from djevops.remote.actions import MANAGE_SH
 from djevops.util import git, run_silently
 from dnsimple import Client as DNSimpleClient
@@ -63,9 +63,9 @@ class _DjevopsTest(_TestInTempDir):
         with self._expect_command_error(message):
             init()
 
-    def expect_setup_error(self, message):
+    def expect_deploy_error(self, message):
         with self._expect_command_error(message):
-            setup(VERBOSE)
+            deploy(VERBOSE)
 
     def start_django_project(self):
         run_silently([
@@ -137,10 +137,10 @@ class OfflineTest(_DjevopsTest):
 
         init()
 
-    def test_setup(self):
+    def test_deploy(self):
         self.test_init()
 
-        self.expect_setup_error(
+        self.expect_deploy_error(
             "Please set your server's IP address in deploy.yml. For example:\n"
             "    server: 1.2.3.4"
         )
@@ -148,7 +148,7 @@ class OfflineTest(_DjevopsTest):
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['server'] = '1.2.3.4'
 
-        self.expect_setup_error(
+        self.expect_deploy_error(
             'Please set Django setting ALLOWED_HOSTS to the list of host '
             'names or IP addresses under which your server is accessible. '
             'For example, in settings.py:\n\n'
@@ -172,13 +172,13 @@ class OfflineTest(_DjevopsTest):
                 'clear': {'ALLOWED_HOSTS': '1.2.3.4'}
             }
 
-        expect_setup_to_succeed = lambda: setup(VERBOSE, dry_run=True)
-        expect_setup_to_succeed()
+        expect_deploy_to_succeed = lambda: deploy(VERBOSE, dry_run=True)
+        expect_deploy_to_succeed()
 
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['services']['web']['domains'] = ['example.com']
 
-        self.expect_setup_error(
+        self.expect_deploy_error(
             'Please set Django setting ALLOWED_HOSTS to the list of host '
             'names or IP addresses under which your server is accessible. '
             'For example, in settings.py:\n\n'
@@ -197,11 +197,11 @@ class OfflineTest(_DjevopsTest):
             deploy_yml['services']['web']['env']['clear']['ALLOWED_HOSTS'] = \
                 'example.com'
 
-        expect_setup_to_succeed()
+        expect_deploy_to_succeed()
 
         self.add_to_settings(["STATIC_ROOT = '/some/hardcoded/path'"])
 
-        self.expect_setup_error(
+        self.expect_deploy_error(
             'Please set Django setting STATIC_ROOT to the value of '
             'environment variable STATIC_ROOT. For example, in '
             'settings.py:\n\n'
@@ -211,12 +211,12 @@ class OfflineTest(_DjevopsTest):
 
         self.add_to_settings(["STATIC_ROOT = os.getenv('STATIC_ROOT')"])
 
-        expect_setup_to_succeed()
+        expect_deploy_to_succeed()
 
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['db'] = {'type': 'sqlite'}
 
-        self.expect_setup_error(
+        self.expect_deploy_error(
             "Please set DATABASES['default']['NAME'] in settings.py to the "
             "value of environment variable SQLITE_DB_FILE. A good expression "
             "is:\n"
@@ -228,7 +228,7 @@ class OfflineTest(_DjevopsTest):
             "or DATABASES['default']['NAME']"
         ])
 
-        expect_setup_to_succeed()
+        expect_deploy_to_succeed()
 
 
 class OnlineTest(_DjevopsTest):
@@ -334,7 +334,7 @@ class OnlineTest(_DjevopsTest):
         self._test_celery()
 
     def _test_http(self):
-        setup(VERBOSE)
+        deploy(VERBOSE)
         response = requests.get(f'http://{self.server_ip}')
         self.assertEqual(response.status_code, 200)
         self.assertIn('The install worked', response.text)
@@ -347,7 +347,7 @@ class OnlineTest(_DjevopsTest):
                     'ALLOWED_HOSTS': self.server_hostname
                 }
             }
-        setup(VERBOSE)
+        deploy(VERBOSE)
         response = requests.get(f'https://{self.server_hostname}')
         self.assertEqual(response.status_code, 200)
         self.assertIn('The install worked', response.text)
@@ -362,7 +362,7 @@ class OnlineTest(_DjevopsTest):
         ])
 
         git('push')
-        setup(VERBOSE)
+        deploy(VERBOSE)
 
         # Test that the `web` user can write to the database:
         create_superuser_cmd = (
@@ -384,7 +384,7 @@ class OnlineTest(_DjevopsTest):
             f.write(f'EMAIL_PASSWORD = {EMAIL_PASSWORD!r}\n')
 
         git('push')
-        setup(VERBOSE)
+        deploy(VERBOSE)
 
         send_mail_script = (
             f'from django.core.mail import send_mail; '
@@ -415,7 +415,7 @@ class OnlineTest(_DjevopsTest):
         commit(test_txt, 'Add static file')
 
         git('push')
-        setup(VERBOSE)
+        deploy(VERBOSE)
 
         response = requests.get(f'http://{self.server_ip}/{test_txt_relpath}')
         self.assertEqual(200, response.status_code)
@@ -466,7 +466,7 @@ class OnlineTest(_DjevopsTest):
         commit(tasks_py, 'Add celery task')
 
         git('push')
-        setup(VERBOSE)
+        deploy(VERBOSE)
 
         run_task_script = (
             f'from {self.DJANGO_APP_NAME}.tasks import test_task; '

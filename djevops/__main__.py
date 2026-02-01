@@ -81,7 +81,7 @@ def init():
     with open('djevops/deploy.yml', 'w') as f:
         f.write(yaml.dump(deploy_yml))
 
-def setup(verbose=False, dry_run=False):
+def deploy(verbose=False, dry_run=False):
     deploy_yml = 'djevops/deploy.yml'
     with open(deploy_yml) as f:
         deploy_config = yaml.safe_load(f)
@@ -105,7 +105,7 @@ def setup(verbose=False, dry_run=False):
         remove(secrets_json.name)
 
     run_with_djevops_venv(
-        'root', server, 'python -m djevops.remote.setup', verbose
+        'root', server, 'python -m djevops.remote.deploy', verbose
     )
 
 def check_config(deploy_config, secrets):
@@ -191,15 +191,15 @@ def get_ssh_command():
 
 if __name__ == '__main__':
     if len(sys.argv) < 2 or len(sys.argv) > 3:
-        print('Usage: djevops init|setup [--verbose]')
+        print('Usage: djevops init|deploy [--verbose]')
         sys.exit(0)
     command = sys.argv[1]
     verbose = len(sys.argv) == 3 and sys.argv[2] == '--verbose'
     try:
         if command == 'init':
             init()
-        elif command == 'setup':
-            setup(verbose)
+        elif command == 'deploy':
+            deploy(verbose)
         else:
             raise CommandError(f'Unknown command: {command}')
     except CommandError as e:
