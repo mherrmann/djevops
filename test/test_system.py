@@ -399,8 +399,7 @@ class OnlineTest(_DjevopsTest):
         git('push')
         setup(VERBOSE)
 
-        response = \
-            requests.get(f'https://{self.server_hostname}/{test_txt_relpath}')
+        response = requests.get(f'http://{self.server_ip}/{test_txt_relpath}')
         self.assertEqual(200, response.status_code)
         self.assertEqual(test_content, response.text)
 

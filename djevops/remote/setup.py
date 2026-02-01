@@ -258,13 +258,13 @@ def main():
         if primary_domain:
             with open('/etc/mailname', 'w') as f:
                 f.write(primary_domain + '\n')
-        _chown('/etc/mailname', 'postfix')
+            _chown('/etc/mailname', 'postfix')
         smtp_host = config['mail']['host']
         copy_with_replace(
             '/opt/djevops/conf/postfix/main.cf',
             '/etc/postfix/main.cf',
             {
-                '$primary_domain': primary_domain,
+                '$HOST_NAME': primary_domain,
                 '$SMTP_HOST': smtp_host,
             }
         )
