@@ -10,7 +10,8 @@ from os.path import exists
 from pwd import getpwnam
 from random import randint
 from shutil import rmtree, copyfile
-from subprocess import PIPE, STDOUT, run, CalledProcessError
+from subprocess import PIPE, STDOUT, run, CalledProcessError, DEVNULL
+from time import sleep
 
 import sys
 
@@ -117,7 +118,6 @@ def main():
     admin_email = None
     service_domains = {}
     services_users_envs = get_services_users_envs(config, secrets)
-    gunicorns = []
     for service_name, (user, env) in services_users_envs.items():
         if user not in created_users:
             ensure_group_exists(user)
@@ -144,7 +144,6 @@ def main():
                     if not isinstance(admin_email, str):
                         admin_email = admin_email[1]
             supervisor_conf_file = 'gunicorn.conf'
-            gunicorns.append(service_name)
             nginx_available_file = '/etc/nginx/sites-available/' + service_name
             domains = service.get('domains', [])
             copy_with_replace(
@@ -316,18 +315,37 @@ def main():
     _run('/opt/djevops/bin/init-run-dir.sh')
 
     log('Starting services...')
-    _run('supervisorctl reread')
-    _run('supervisorctl update')
-    for gunicorn in gunicorns:
-        _run(f'supervisorctl signal HUP {gunicorn}', ignore_errors=(7,))
-
+    updated_services_str = _run('supervisorctl update')
+    updated_services = set()
+    for line in updated_services_str.splitlines():
+        parts = line.split(': ', 1)
+        assert len(parts) == 2, line
+        updated_services.add(parts[0])
+    # Restart those services that were not already handled by `update`:
+    for service_name, service in config['services'].items():
+        if service_name in updated_services:
+            continue
+        if service['type'] == 'django':
+            try:
+                _run(['supervisorctl', 'signal', 'HUP', service_name])
+            except CalledProcessError as e:
+                if e.returncode != 7:
+                    raise
+                # The service wasn't running.
+                _run_silently(['supervisorctl', 'start', service_name])
+        else:
+            _run_silently(['supervisorctl', 'restart', service_name])
+    # This loop should not run forever because we supply `startsecs` in the
+    # supervisor config file.
+    while 'STARTING' in _run('supervisorctl status'):
+        sleep(1)
     any_service_failed = False
-    for status_line in _run('supervisorctl status').splitlines():
-        parts = status_line.split()
+    for line in _run('supervisorctl status').splitlines():
+        parts = line.split()
         if parts[1] != 'RUNNING':
             any_service_failed = True
-            print('\n' + status_line)
-            log_file = f'/var/log/{parts[0]}.log'
+            print('\n' + line)
+            log_file = f'/var/log/{service_name}.log'
             with open(log_file) as f:
                 print(f.read().rstrip())
     if any_service_failed:
@@ -410,6 +428,9 @@ def _run(cmd, ignore_errors=(), env=None):
     except CalledProcessError as e:
         if e.returncode not in ignore_errors:
             raise
+
+def _run_silently(cmd):
+    return run(cmd, stdout=DEVNULL, stderr=DEVNULL)
 
 if __name__ == '__main__':
     try:
