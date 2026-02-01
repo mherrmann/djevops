@@ -465,11 +465,6 @@ class OnlineTest(_DjevopsTest):
         ]))
         commit(tasks_py, 'Add celery task')
 
-        core_init = Path('core/__init__.py')
-        core_init.parent.mkdir(parents=True)
-        core_init.write_text(f'from {proj}.celery import app\n')
-        commit(core_init, 'Add core module for celery -A core')
-
         git('push')
         setup(VERBOSE)
 
