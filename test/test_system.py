@@ -213,6 +213,23 @@ class OfflineTest(_DjevopsTest):
 
         expect_setup_to_succeed()
 
+        with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['db'] = {'type': 'sqlite'}
+
+        self.expect_setup_error(
+            "Please set DATABASES['default']['NAME'] in settings.py to the "
+            "value of environment variable SQLITE_DB_FILE. A good expression "
+            "is:\n"
+            "    os.getenv('SQLITE_DB_FILE') or <what you had before>"
+        )
+
+        self.add_to_settings([
+            "DATABASES['default']['NAME'] = os.getenv('SQLITE_DB_FILE') "
+            "or DATABASES['default']['NAME']"
+        ])
+
+        expect_setup_to_succeed()
+
 
 class OnlineTest(_DjevopsTest):
 
@@ -338,13 +355,6 @@ class OnlineTest(_DjevopsTest):
     def _test_db(self):
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['db'] = {'type': 'sqlite'}
-
-        self.expect_setup_error(
-            "Please set DATABASES['default']['NAME'] in settings.py to the "
-            "value of environment variable SQLITE_DB_FILE. A good expression "
-            "is:\n"
-            "    os.getenv('SQLITE_DB_FILE') or <what you had before>"
-        )
 
         self.add_to_settings([
             "DATABASES['default']['NAME'] = os.getenv('SQLITE_DB_FILE') "
