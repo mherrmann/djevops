@@ -370,7 +370,7 @@ def main():
     if any_service_failed:
         error('Some services failed to start. See logs above.')
 
-    _run('service nginx restart')
+    _run('nginx -s reload')
 
     server_url = f'https://{primary_domain}' if primary_domain \
         else f'http://{server_ip}'
