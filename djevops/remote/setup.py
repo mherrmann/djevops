@@ -92,7 +92,9 @@ def main():
 
     if not exists('/srv/venv'):
         log('Creating virtual environment...')
-        _run('python3 -m venv /srv/venv')
+        # Need to use an absolute path to python3 because this process runs in a
+        # virtual environment produced by `uv`, which only root has access to.
+        _run('/usr/bin/python3 -m venv /srv/venv')
 
     log('Installing Python dependencies...')
     install_python_deps()
