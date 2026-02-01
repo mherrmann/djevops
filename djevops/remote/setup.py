@@ -25,7 +25,8 @@ def main():
 
     server_ip = config['server']
     primary_domain = ''
-    for service in config['services'].values():
+    services = config['services']
+    for service in services.values():
         try:
             primary_domain = service['domains'][0]
             break
@@ -118,6 +119,7 @@ def main():
     admin_email = None
     service_domains = {}
     services_users_envs = get_services_users_envs(config, secrets)
+    changed_bashrcs = set()
     for service_name, (user, env) in services_users_envs.items():
         if user not in created_users:
             ensure_group_exists(user)
@@ -130,12 +132,21 @@ def main():
             symlink_force(
                 '/opt/djevops/conf/.bash_profile', f'{home_dir}/.bash_profile'
             )
-            with open(f'{home_dir}/.bashrc', 'w') as f:
-                for key, value in env.items():
-                    f.write(f'export {key}="{value}"\n')
+            new_bashrc_contents = '\n'.join(
+                f'export {key}="{value}"' for key, value in env.items()
+            )
+            try:
+                with open(f'{home_dir}/.bashrc', 'r') as f:
+                    old_bashrc_contents = f.read()
+            except FileNotFoundError:
+                old_bashrc_contents = ''
+            if old_bashrc_contents != new_bashrc_contents:
+                changed_bashrcs.add(user)
+                with open(f'{home_dir}/.bashrc', 'w') as f:
+                    f.write(new_bashrc_contents)
             _chown(f'{home_dir}/.bashrc', user, user)
             created_users.add(user)
-        service = config['services'][service_name]
+        service = services[service_name]
         if service['type'] == 'django':
             if not admin_email:
                 admins = get_django_setting('ADMINS', env)
@@ -255,16 +266,16 @@ def main():
         install('postfix mailutils libsasl2-2 ca-certificates libsasl2-modules')
 
         log('Configuring Postfix...')
-        if primary_domain:
-            with open('/etc/mailname', 'w') as f:
-                f.write(primary_domain + '\n')
-            _chown('/etc/mailname', 'postfix')
+        hostname = primary_domain or _run('hostname')
+        with open('/etc/mailname', 'w') as f:
+            f.write(hostname + '\n')
+        _chown('/etc/mailname', 'postfix')
         smtp_host = config['mail']['host']
         copy_with_replace(
             '/opt/djevops/conf/postfix/main.cf',
             '/etc/postfix/main.cf',
             {
-                '$HOST_NAME': primary_domain,
+                '$HOST_NAME': hostname,
                 '$SMTP_HOST': smtp_host,
             }
         )
@@ -322,10 +333,11 @@ def main():
         assert len(parts) == 2, line
         updated_services.add(parts[0])
     # Restart those services that were not already handled by `update`:
-    for service_name, service in config['services'].items():
+    for service_name, (user, env) in services_users_envs.items():
         if service_name in updated_services:
             continue
-        if service['type'] == 'django':
+        service = services[service_name]
+        if user in changed_bashrcs and service['type'] == 'django':
             try:
                 _run(['supervisorctl', 'signal', 'HUP', service_name])
             except CalledProcessError as e:
@@ -337,12 +349,19 @@ def main():
             _run_silently(['supervisorctl', 'restart', service_name])
     # This loop should not run forever because we supply `startsecs` in the
     # supervisor config file.
-    while 'STARTING' in _run('supervisorctl status'):
-        sleep(1)
-    any_service_failed = False
-    for line in _run('supervisorctl status').splitlines():
+    while True:
+        supervisor_status_str = _run('supervisorctl status')
+        if 'STARTING' in supervisor_status_str:
+            sleep(1)
+        else:
+            break
+    supervisor_status = {}
+    for line in supervisor_status_str.splitlines():
         parts = line.split()
-        if parts[1] != 'RUNNING':
+        supervisor_status[parts[0]] = parts[1]
+    any_service_failed = False
+    for service_name in services:
+        if supervisor_status[service_name] != 'RUNNING':
             any_service_failed = True
             print('\n' + line)
             log_file = f'/var/log/{service_name}.log'
