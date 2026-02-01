@@ -149,31 +149,57 @@ class OfflineTest(_DjevopsTest):
             deploy_yml['server'] = '1.2.3.4'
 
         self.expect_setup_error(
-            'Please set Django setting ALLOWED_HOSTS to the list of domains '
-            'under which your server is accessible. For example, in '
-            'settings.py:\n\n'
+            'Please set Django setting ALLOWED_HOSTS to the list of host '
+            'names or IP addresses under which your server is accessible. '
+            'For example, in settings.py:\n\n'
             '    import os\n'
             '    ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(" ")\n\n'
             'And in deploy.yml:\n\n'
             '    services:\n'
             '      web:\n'
             '        type: django\n'
-            '        domains: [my.website.com]\n'
             '      env:\n'
             '        clear:\n'
-            '          ALLOWED_HOSTS: my.website.com'
+            f'          ALLOWED_HOSTS: "1.2.3.4"'
         )
+
+        self.add_to_settings([
+            "import os",
+            "ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(' ')"
+        ])
+        with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['services']['web']['env'] = {
+                'clear': {'ALLOWED_HOSTS': '1.2.3.4'}
+            }
+
+        expect_setup_to_succeed = lambda: setup(VERBOSE, dry_run=True)
+        expect_setup_to_succeed()
 
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['services']['web']['domains'] = ['example.com']
-            deploy_yml['services']['web']['env'] = {
-                'clear': {'ALLOWED_HOSTS': 'example.com'}
-            }
-        self.add_to_settings([
-            "import os",
-            "ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(' ')",
-            "STATIC_ROOT = '/some/hardcoded/path'"
-        ])
+
+        self.expect_setup_error(
+            'Please set Django setting ALLOWED_HOSTS to the list of host '
+            'names or IP addresses under which your server is accessible. '
+            'For example, in settings.py:\n\n'
+            '    import os\n'
+            '    ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(" ")\n\n'
+            'And in deploy.yml:\n\n'
+            '    services:\n'
+            '      web:\n'
+            '        type: django\n'
+            '      env:\n'
+            '        clear:\n'
+            f'          ALLOWED_HOSTS: "example.com"'
+        )
+
+        with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['services']['web']['env']['clear']['ALLOWED_HOSTS'] = \
+                'example.com'
+
+        expect_setup_to_succeed()
+
+        self.add_to_settings(["STATIC_ROOT = '/some/hardcoded/path'"])
 
         self.expect_setup_error(
             'Please set Django setting STATIC_ROOT to the value of '
@@ -182,6 +208,10 @@ class OfflineTest(_DjevopsTest):
             '    import os\n'
             '    STATIC_ROOT = os.getenv("STATIC_ROOT")'
         )
+
+        self.add_to_settings(["STATIC_ROOT = os.getenv('STATIC_ROOT')"])
+
+        expect_setup_to_succeed()
 
 
 class OnlineTest(_DjevopsTest):
@@ -272,32 +302,32 @@ class OnlineTest(_DjevopsTest):
 
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['server'] = self.server_ip
+            deploy_yml['services']['web']['env'] = {
+                'clear': {
+                    'ALLOWED_HOSTS': self.server_ip
+                }
+            }
+
+    def test_http(self):
+        setup(VERBOSE)
+        response = requests.get(f'http://{self.server_ip}')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('The install worked', response.text)
+
+    def test_ssl(self):
+        with self.update_deploy_yml() as deploy_yml:
             deploy_yml['services']['web']['domains'] = [self.server_hostname]
             deploy_yml['services']['web']['env'] = {
                 'clear': {
                     'ALLOWED_HOSTS': self.server_hostname
                 }
             }
-
-    def test_setup(self):
-        # It would be nicer to run these as separate test_ methods, but it would
-        # be extremely slow to create and delete the server for each test. If
-        # `unittest` had support for parallel execution, it would not be too
-        # bad. Alas, it doesn't.
-        self._test_web_access()
-        self._test_db()
-        self._test_email()
-        self._test_static_files()
-        self._test_celery()
-
-    def _test_web_access(self):
         setup(VERBOSE)
-
         response = requests.get(f'https://{self.server_hostname}')
         self.assertEqual(response.status_code, 200)
         self.assertIn('The install worked', response.text)
 
-    def _test_db(self):
+    def test_db(self):
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['db'] = {'type': 'sqlite'}
 
@@ -323,7 +353,7 @@ class OnlineTest(_DjevopsTest):
         )
         self._ssh(f"su -c '{create_superuser_cmd}' - web")
 
-    def _test_email(self):
+    def test_email(self):
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['mail'] = {
                 'host': SMTP_HOST,
@@ -351,7 +381,7 @@ class OnlineTest(_DjevopsTest):
         )
         self.assertTrue(email_found, 'Test email was not received')
 
-    def _test_static_files(self):
+    def test_static_files(self):
         self.add_to_settings([
             "DEBUG = os.getenv('DEBUG') == 'True'",
             "STATIC_ROOT = os.getenv('STATIC_ROOT')"
@@ -374,7 +404,7 @@ class OnlineTest(_DjevopsTest):
         self.assertEqual(200, response.status_code)
         self.assertEqual(test_content, response.text)
 
-    def _test_celery(self):
+    def test_celery(self):
         with open('requirements.txt', 'a') as f:
             f.write(f'\ncelery[redis]=={celery.__version__}')
         commit('requirements.txt', 'Add celery')

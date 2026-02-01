@@ -17,7 +17,6 @@ import sys
 import yaml
 
 SAMPLE_SERVER_IP = '0.0.0.0'
-SAMPLE_DOMAIN = 'example.com'
 
 SECRETS_NAME_RE = r'^[A-Z][A-Z0-9_]+$'
 
@@ -74,8 +73,7 @@ def init():
         'git': git_config,
         'services': {
             'web': {
-                'type': 'django',
-                'domains': [SAMPLE_DOMAIN],
+                'type': 'django'
             }
         }
     }
@@ -83,13 +81,16 @@ def init():
     with open('djevops/deploy.yml', 'w') as f:
         f.write(yaml.dump(deploy_yml))
 
-def setup(verbose=False):
+def setup(verbose=False, dry_run=False):
     deploy_yml = 'djevops/deploy.yml'
     with open(deploy_yml) as f:
         deploy_config = yaml.safe_load(f)
     secrets = get_secrets('djevops/secrets.py')
 
     check_config(deploy_config, secrets)
+
+    if dry_run:
+        return
 
     server = deploy_config['server']
     install_djevops_on_server('root', server, verbose)
@@ -108,8 +109,8 @@ def setup(verbose=False):
     )
 
 def check_config(deploy_config, secrets):
-    server = deploy_config.get('server')
-    if not server or server == SAMPLE_SERVER_IP:
+    server_ip = deploy_config.get('server')
+    if not server_ip or server_ip == SAMPLE_SERVER_IP:
         raise CommandError(
             "Please set your server's IP address in deploy.yml. For example:\n"
             "    server: 1.2.3.4"
@@ -126,17 +127,7 @@ def check_config(deploy_config, secrets):
             '        type: django'
         )
 
-    domains = django_service.get('domains')
-    if not domains or not isinstance(domains, list):
-        raise CommandError(
-            'Please set `domains` on the service of type `django` in '
-            'deploy.yml to the list of domains under which your server is '
-            'accessible. For example:\n'
-            '    services:\n'
-            '      web:\n'
-            '        type: django\n'
-            '        domains: [my.website.com]'
-        )
+    hosts = django_service.get('domains') or [server_ip]
 
     user_envs = get_services_users_envs(deploy_config, secrets)
     django_env = user_envs[django_service_name][1]
@@ -148,7 +139,7 @@ def check_config(deploy_config, secrets):
         'import sys',
         f"sys.path.append('{bin_dir}')",
         'from check_django_settings import main',
-        f'main({domains!r}, {has_db})',
+        f'main({hosts!r}, {has_db})',
     ], env=django_env)
     if error_msg:
         raise CommandError(error_msg)

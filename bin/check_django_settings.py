@@ -3,8 +3,8 @@ from django.conf import settings
 import os
 import sys
 
-def main(domains, has_db):
-    check_allowed_hosts(domains)
+def main(hosts, has_db):
+    check_allowed_hosts(hosts)
     check_staticfiles()
     if has_db:
         check_databases()
@@ -21,24 +21,24 @@ def check_staticfiles():
                 '    STATIC_ROOT = os.getenv("STATIC_ROOT")'
             )
 
-def check_allowed_hosts(domains):
+def check_allowed_hosts(hosts):
     # TODO: Allow wildcards in ALLOWED_HOSTS.
-    if settings.ALLOWED_HOSTS != domains:
-        error(
-            'Please set Django setting ALLOWED_HOSTS to the list of domains '
-            'under which your server is accessible. For example, in '
-            'settings.py:\n\n'
-            '    import os\n'
-            '    ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(" ")\n\n'
-            'And in deploy.yml:\n\n'
-            '    services:\n'
-            '      web:\n'
-            '        type: django\n'
-            '        domains: [my.website.com]\n'
-            '      env:\n'
-            '        clear:\n'
-            '          ALLOWED_HOSTS: my.website.com'
-        )
+    for host in hosts:
+        if host not in settings.ALLOWED_HOSTS:
+            error(
+                'Please set Django setting ALLOWED_HOSTS to the list of host '
+                'names or IP addresses under which your server is accessible. '
+                'For example, in settings.py:\n\n'
+                '    import os\n'
+                '    ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(" ")\n\n'
+                'And in deploy.yml:\n\n'
+                '    services:\n'
+                '      web:\n'
+                '        type: django\n'
+                '      env:\n'
+                '        clear:\n'
+                f'          ALLOWED_HOSTS: "{" ".join(hosts)}"'
+            )
 
 def check_databases():
     if settings.DATABASES['default']['NAME'] != os.environ['SQLITE_DB_FILE']:

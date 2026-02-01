@@ -20,10 +20,11 @@ def main():
     config = get_deploy_config()
     secrets = get_secrets()
 
-    host_name = config['server']
+    server_ip = config['server']
+    primary_domain = ''
     for service in config['services'].values():
         try:
-            host_name = service['domains'][0]
+            primary_domain = service['domains'][0]
             break
         except (KeyError, IndexError):
             pass
@@ -38,9 +39,9 @@ def main():
     else:
         git_repo_url = f'https://{git_server}/{git_repo_name}.git'
 
-    if _run('hostname') != host_name:
+    if primary_domain and _run('hostname') != primary_domain:
         log('Setting hostname...')
-        _run(['hostnamectl', 'set-hostname', host_name])
+        _run(['hostnamectl', 'set-hostname', primary_domain])
 
     log('Installing git...')
     install('git-core')
@@ -141,10 +142,11 @@ def main():
             supervisor_conf_file = 'gunicorn.conf'
             gunicorns.append(service_name)
             nginx_available_file = '/etc/nginx/sites-available/' + service_name
+            domains = service.get('domains', [])
             copy_with_replace(
                 '/opt/djevops/conf/nginx/django', nginx_available_file,
                 {
-                    '$SERVER_NAME': ' '.join(service['domains']),
+                    '$SERVER_NAME': ' '.join(domains) or server_ip,
                     '$SERVICE': service_name,
                 }
             )
@@ -158,7 +160,8 @@ def main():
                 f'/etc/logrotate.d/{service_name}-nginx',
                 {'$SERVICE': service_name}
             )
-            service_domains[service_name] = service['domains'][:]
+            if domains:
+                service_domains[service_name] = domains[:]
         elif service['type'] == 'celery':
             supervisor_conf_file = 'celery.conf'
         else:
@@ -239,22 +242,26 @@ def main():
         _run('iptables-save > /etc/iptables/rules.v4')
 
         log('Installing Postfix...')
-        debconf_set_selections(f'postfix postfix/mailname string {host_name}')
+        if primary_domain:
+            debconf_set_selections(
+                f'postfix postfix/mailname string {primary_domain}'
+            )
         debconf_set_selections(
             "postfix postfix/main_mailer_type string 'Internet Site'"
         )
         install('postfix mailutils libsasl2-2 ca-certificates libsasl2-modules')
 
         log('Configuring Postfix...')
-        with open('/etc/mailname', 'w') as f:
-            f.write(host_name + '\n')
+        if primary_domain:
+            with open('/etc/mailname', 'w') as f:
+                f.write(primary_domain + '\n')
         _chown('/etc/mailname', 'postfix')
         smtp_host = config['mail']['host']
         copy_with_replace(
             '/opt/djevops/conf/postfix/main.cf',
             '/etc/postfix/main.cf',
             {
-                '$HOST_NAME': host_name,
+                '$primary_domain': primary_domain,
                 '$SMTP_HOST': smtp_host,
             }
         )
@@ -311,7 +318,9 @@ def main():
         _run(f'supervisorctl signal HUP {gunicorn}', ignore_errors=(7,))
     _run('service nginx restart')
 
-    log(f'The server is now serving requests at {host_name}!')
+    server_url = f'https://{primary_domain}' if primary_domain \
+        else f'http://{server_ip}'
+    log(f'The server is now serving requests at {server_url}!')
 
     log('Setting up crontab...')
     symlink_force('/opt/djevops/bin/cronic', '/usr/bin/cronic')
