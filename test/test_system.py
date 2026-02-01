@@ -308,13 +308,21 @@ class OnlineTest(_DjevopsTest):
                 }
             }
 
-    def test_http(self):
+    def test_all(self):
+        self._test_http()
+        self._test_ssl()
+        self._test_db()
+        self._test_email()
+        self._test_static_files()
+        self._test_celery()
+
+    def _test_http(self):
         setup(VERBOSE)
         response = requests.get(f'http://{self.server_ip}')
         self.assertEqual(response.status_code, 200)
         self.assertIn('The install worked', response.text)
 
-    def test_ssl(self):
+    def _test_ssl(self):
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['services']['web']['domains'] = [self.server_hostname]
             deploy_yml['services']['web']['env'] = {
@@ -327,7 +335,7 @@ class OnlineTest(_DjevopsTest):
         self.assertEqual(response.status_code, 200)
         self.assertIn('The install worked', response.text)
 
-    def test_db(self):
+    def _test_db(self):
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['db'] = {'type': 'sqlite'}
 
@@ -353,7 +361,7 @@ class OnlineTest(_DjevopsTest):
         )
         self._ssh(f"su -c '{create_superuser_cmd}' - web")
 
-    def test_email(self):
+    def _test_email(self):
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['mail'] = {
                 'host': SMTP_HOST,
@@ -381,7 +389,7 @@ class OnlineTest(_DjevopsTest):
         )
         self.assertTrue(email_found, 'Test email was not received')
 
-    def test_static_files(self):
+    def _test_static_files(self):
         self.add_to_settings([
             "DEBUG = os.getenv('DEBUG') == 'True'",
             "STATIC_ROOT = os.getenv('STATIC_ROOT')"
@@ -403,7 +411,7 @@ class OnlineTest(_DjevopsTest):
         self.assertEqual(200, response.status_code)
         self.assertEqual(test_content, response.text)
 
-    def test_celery(self):
+    def _test_celery(self):
         with open('requirements.txt', 'a') as f:
             f.write(f'\ncelery[redis]=={celery.__version__}')
         commit('requirements.txt', 'Add celery')
