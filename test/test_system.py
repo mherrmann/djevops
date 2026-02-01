@@ -247,38 +247,38 @@ class OnlineTest(_DjevopsTest):
         self.server = create_hetzner_server(
             HETZNER_API_TOKEN, self.ssh_key, self.test_name
         )
-        self.server_ip = self.server.public_net.ipv4.ip
-        wait_for_server_to_be_ready(
-            'root', self.server_ip, self.SSH_PRIVATE_KEY, self.known_hosts_file
-        )
+        try:
+            self.server_ip = self.server.public_net.ipv4.ip
+            wait_for_server_to_be_ready(
+                'root', self.server_ip, self.SSH_PRIVATE_KEY,
+                self.known_hosts_file
+            )
 
-        self.dns_record = DNSimpleARecord.create(
-            DNSIMPLE_API_TOKEN, DNSIMPLE_ACCOUNT_ID, DNSIMPLE_TEST_DOMAIN,
-            self.test_name, self.server_ip
-        )
+            self.dns_record = DNSimpleARecord.create(
+                DNSIMPLE_API_TOKEN, DNSIMPLE_ACCOUNT_ID, DNSIMPLE_TEST_DOMAIN,
+                self.test_name, self.server_ip
+            )
+            try:
+                self.ssh_command = \
+                    f'ssh -i {self.SSH_PRIVATE_KEY} ' \
+                    f'-o UserKnownHostsFile={self.known_hosts_file}'
+                os.environ['DJEVOPS_SSH_COMMAND'] = self.ssh_command
 
-        self.ssh_command = \
-            f'ssh -i {self.SSH_PRIVATE_KEY} ' \
-            f'-o UserKnownHostsFile={self.known_hosts_file}'
-        os.environ['DJEVOPS_SSH_COMMAND'] = self.ssh_command
-
-        self.server_hostname = f'{self.test_name}.{DNSIMPLE_TEST_DOMAIN}'
-        self.init_test_app()
+                self.server_hostname = \
+                    f'{self.test_name}.{DNSIMPLE_TEST_DOMAIN}'
+                self.init_test_app()
+            except:
+                self._delete_dns_record()
+                raise
+        except:
+            self._delete_server()
+            raise
 
     def tearDown(self):
         self._delete_remote_branch_if_exists(self.test_name)
         os.environ.pop('DJEVOPS_SSH_COMMAND')
-        try:
-            self.dns_record.delete()
-        except Exception as e:
-            print(
-                f'Warning: Failed to delete DNS record {self.dns_record}: '
-                f'{e}'
-            )
-        try:
-            self.server.delete()
-        except Exception as e:
-            print(f'Warning: Failed to delete server {self.server}: {e}')
+        self._delete_server()
+        self._delete_dns_record()
         remove(self.known_hosts_file)
         super().tearDown()
 
@@ -464,16 +464,28 @@ class OnlineTest(_DjevopsTest):
         output = self._ssh(f"{MANAGE_SH} shell -c {quote(run_task_script)}")
         self.assertIn('celery works', output)
 
-    def _ssh(self, cmd):
-        return run_silently(
-            f'{self.ssh_command} root@{self.server_ip} {quote(cmd)}', shell=True
-        )
+    def _delete_dns_record(self):
+        try:
+            self.dns_record.delete()
+        except Exception as e:
+            print(f'Warning: Failed to delete DNS record {self.dns_record}: {e}')
+
+    def _delete_server(self):
+        try:
+            self.server.delete()
+        except Exception as e:
+            print(f'Warning: Failed to delete server {self.server}: {e}')
 
     def _delete_remote_branch_if_exists(self, name):
         try:
             git('push', 'origin', '--delete', name)
         except CalledProcessError:
             pass
+
+    def _ssh(self, cmd):
+        return run_silently(
+            f'{self.ssh_command} root@{self.server_ip} {quote(cmd)}', shell=True
+        )
 
 def ensure_hetzner_ssh_key_exists(api_token, ssh_key_content, name):
     hetzner = HetznerClient(token=api_token)
