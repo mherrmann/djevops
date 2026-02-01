@@ -5,7 +5,7 @@ Unlike other tools, djevops runs the application "on bare metal". That is,
 without any abstraction layers such as Docker. This makes development fast and
 easy. Other features of djevops include:
 
- * Automatic SSL certificate handling
+ * Automatic SSL certificates
  * Emails to admins when server errors occur
  * Database backups
  * Built-in support for Celery and Redis
