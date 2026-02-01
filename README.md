@@ -1,42 +1,26 @@
-# djevops
+# djevops: Host Django on bare metal
 
-Host Django without Docker
+djevops is a command-line tool for deploying a Django web app to a Linux VPS.
+Unlike other tools, djevops runs the application "on bare metal". That is,
+without any abstraction layers such as Docker. This makes development fast and
+easy. Other features of djevops include:
 
-djevops is a tool for deploying a Django web application to a Linux VPS. It runs
-the application "on bare metal". That is, without any abstraction layers such as
-Docker. This makes development fast and easy. djevops also solves many common
-issues, such as serving the site via httpS, log inspection, error emails,
-monitoring, background tasks, backups, automatic OS updates and secure defaults.
+ * Automatic SSL certificate handling
+ * Emails to admins when server errors occur
+ * Database backups
+ * Built-in support for Celery and Redis
+ * Secret handling
+ * Easy access to log files
+ * Secure defaults
+ * Automatic OS updates
 
-djevops grew out of Django apps I've been developing since 2014. When I found
-myself copy-pasting the same (but much improved) code for deploying a Django app
-for the eleventh time, I realized it is time to extract a reusable solution. My
-djevops apps currently serve hundreds of thousands of users and tens of millions
-of requests each month.
-
-## Features
-
- * Easily run your Django app as a public website.
- * No special infrastructure required - a USD 5 per month Linux VPS is enough.
- * Fast deployments.
- * Simple debugging and development.
- * Great performance.
-
-## Prerequisites
-
-You need a Linux VPS running Debian 12+ with SSH `root` access. This machine
-needs to be reachable from the internet and have a domain name associated with
-it. For example, you can rent the VPS from [Linode](https://linode.com) and buy
-the domain from [DNSimple](https://dnsimple.com). Then, just create a DNS `A`
-record that ties the domain to the VPS's IP.
-
-## Getting started
-
-You need a file `djevops/deploy.yml` in your project directory that for example
-looks as follows:
+To get started with djevops, all you need is a Linux VPS running Ubuntu or
+Debian. Install djevops with `pip install djevops`. Then, execute
+`djevops init` in your Django app's Git repository. You get a config file that
+looks similar to the following:
 
 ```
-server: 172.104.151.194
+server: 1.2.3.4
 
 git:
   repo: mherrmann/djangotutorial
@@ -50,9 +34,7 @@ services:
     env:
       clear:
         DEBUG: "False"
-        HOST_NAME: djangotutorial.herrmann.io
-        SERVER_EMAIL: djangotutorial@myservers.com
-        ADMIN_EMAIL: admin@gmail.com
+        ALLOWED_HOSTS: djangotutorial.herrmann.io
       secret:
         - DJANGO_SECRET_KEY
   celery:
@@ -71,9 +53,12 @@ mail:
   password: SMTP_PASSWORD
 ```
 
-Secrets are specified as constants in file `djevops/secrets.py`.
+Secrets such as `GIT_REPO_PRIVKEY` need to be specified as constants in file
+`djevops/secrets.py`.
 
-Then, you can run `djevops setup` to deploy your Django app to your server.
+Fill in your preferred values and run `djevops deploy`. djevops then
+automatically deploys your Django app to your server. Any domains you supply in
+`domains` must have DNS A records pointing at the same IP as `server`.
 
 ## Development
 
