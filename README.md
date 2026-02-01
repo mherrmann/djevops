@@ -15,9 +15,9 @@ easy. Other features of djevops include:
  * Automatic OS updates
 
 To get started with djevops, all you need is a Linux VPS running Ubuntu or
-Debian. Install djevops with `pip install djevops`. Then, execute
-`djevops init` in your Django app's Git repository. You get a config file that
-looks similar to the following:
+Debian. Install djevops on your local machine with `pip install djevops`. Then,
+execute `djevops init` in your Django app's Git repository. You get a config
+file that looks similar to the following:
 
 ```
 server: 1.2.3.4
