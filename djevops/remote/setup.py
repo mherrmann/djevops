@@ -15,6 +15,8 @@ from subprocess import PIPE, STDOUT, run, CalledProcessError
 import sys
 
 ERROR_ALREADY_EXISTS = 9
+TERMINAL_COLOR_SUCCESS = 93
+TERMINAL_COLOR_ERROR = 91
 
 def main():
     config = get_deploy_config()
@@ -316,6 +318,19 @@ def main():
     _run('supervisorctl update')
     for gunicorn in gunicorns:
         _run(f'supervisorctl signal HUP {gunicorn}', ignore_errors=(7,))
+
+    any_service_failed = False
+    for status_line in _run('supervisorctl status').splitlines():
+        parts = status_line.split()
+        if parts[1] != 'RUNNING':
+            any_service_failed = True
+            print('\n' + status_line)
+            log_file = f'/var/log/{parts[0]}.log'
+            with open(log_file) as f:
+                print(f.read().rstrip())
+    if any_service_failed:
+        error('Some services failed to start. See logs above.')
+
     _run('service nginx restart')
 
     server_url = f'https://{primary_domain}' if primary_domain \
@@ -373,13 +388,15 @@ def debconf_set_selections(value):
     run(['debconf-set-selections'], input=value + '\n', text=True, check=True)
 
 def log(message):
-    timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
-    print(f'\n\033[0;32m{timestamp}\033[0m \033[0;93m{message}\033[0m')
+    _log(message, TERMINAL_COLOR_SUCCESS)
 
 def error(message):
-    timestamp = datetime.now().strftime('%H:%M:%S')
-    print(f'\n\033[0;32m{timestamp}\033[0m \033[0;91m{message}\033[0m')
+    _log(message, TERMINAL_COLOR_ERROR)
     sys.exit(1)
+
+def _log(message, color):
+    timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+    print(f'\n\033[0;32m{timestamp}\033[0m \033[0;{color}m{message}\033[0m')
 
 def _run(cmd, ignore_errors=(), env=None):
     shell = isinstance(cmd, str)
