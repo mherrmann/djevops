@@ -2,15 +2,15 @@
 
 djevops is a command-line tool for deploying a Django web app to a Linux VPS.
 Unlike other tools, djevops runs the application "on bare metal". That is,
-without any abstraction layers such as Docker. This makes development fast and
-easy. Other features of djevops include:
+without Docker. This makes development faster and easier. Other features of
+djevops include:
 
- * Automatic SSL certificates
+ * SSL certificate handling and renewals
  * Emails to admins when server errors occur
- * Database backups
+ * Automatic database backups
  * Built-in support for Celery and Redis
- * Secret handling
  * Easy access to log files
+ * Secret handling
  * Secure defaults
  * Automatic OS updates
 
@@ -56,9 +56,9 @@ mail:
 Secrets such as `GIT_REPO_PRIVKEY` need to be specified as constants in file
 `djevops/secrets.py`.
 
-Fill in your preferred values and run `djevops deploy`. djevops then
-automatically deploys your Django app to your server. Any domains you supply in
-`domains` must have DNS A records pointing at the same IP as `server`.
+Fill in your preferred values and run `djevops deploy`. djevops then clones your
+Git repo on the server and starts (and monitors) all services. Any domains you
+supply in `domains` must have DNS A records pointing at the same IP as `server`.
 
 ## Development
 
