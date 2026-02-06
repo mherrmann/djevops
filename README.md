@@ -64,7 +64,7 @@ supply in `domains` must have DNS A records pointing at the same IP as `server`.
 <details>
 <summary>Error emails</summary>
 
-To receive emails when errors occur on your server, supply DJango's `ADMINS`
+To receive emails when errors occur on your server, supply Django's `ADMINS`
 setting in addition to the `mail` config above. For example, in `settings.py`:
 
 ```
