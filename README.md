@@ -1,9 +1,10 @@
 # djevops: Host Django on bare metal
 
-djevops is a command-line tool for deploying a Django web app to a Linux VPS.
-Unlike other tools, djevops runs the application "on bare metal". That is,
-without Docker. This makes development faster and easier. Other features of
-djevops include:
+djevops is a command-line tool for deploying Django web apps on Linux VPSs.
+Unlike other tools, djevops runs Django "on bare metal". That is, without
+Docker. This makes development faster and easier.
+
+Other features of djevops include:
 
  * SSL certificate handling and renewals
  * Emails to admins when server errors occur
