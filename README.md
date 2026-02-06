@@ -49,13 +49,13 @@ db:
 redis:
 
 mail:
-  host: email-smtp.eu-central-1.amazonaws.com
+  host: smtp.gmail.com
   user: SMTP_USER
   password: SMTP_PASSWORD
 ```
 
-Secrets such as `GIT_REPO_PRIVKEY` need to be specified as constants in file
-`djevops/secrets.py`.
+Upper-case values such as `GIT_REPO_PRIVKEY` need to be specified as constants
+in file `djevops/secrets.py`.
 
 Fill in your preferred values and run `djevops deploy`. djevops then clones your
 Git repo on the server and starts (and monitors) all services. Any domains you
@@ -70,6 +70,8 @@ setting in addition to the `mail` config above. For example, in `settings.py`:
 ```
 ADMINS = [('Your Name', 'your@email.com)]
 ```
+
+This requires Django setting `DEBUG` to be `False`.
 
 </details>
 
