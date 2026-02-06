@@ -60,6 +60,18 @@ Fill in your preferred values and run `djevops deploy`. djevops then clones your
 Git repo on the server and starts (and monitors) all services. Any domains you
 supply in `domains` must have DNS A records pointing at the same IP as `server`.
 
+<details>
+<summary>Error emails</summary>
+
+To receive emails when errors occur on your server, supply DJango's `ADMINS`
+setting in addition to the `mail` config above. For example, in `settings.py`:
+
+```
+ADMINS = [('Your Name', 'your@email.com)]
+```
+
+</details>
+
 ## Development
 
 Install the `test` dependencies from [`pyproject.toml`](pyproject.toml). The
