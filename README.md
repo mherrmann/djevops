@@ -33,7 +33,6 @@ services:
     type: django
     env:
       clear:
-        DEBUG: "False"
         ALLOWED_HOSTS: djangotutorial.herrmann.io
       secret:
         - DJANGO_SECRET_KEY
