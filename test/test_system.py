@@ -176,24 +176,6 @@ class OfflineTest(_DjevopsTest):
         expect_deploy_to_succeed()
 
         with self.update_deploy_yml() as deploy_yml:
-            deploy_yml['services']['web']['domains'] = ['example.com']
-
-        self.expect_deploy_error(
-            'Please set Django setting ALLOWED_HOSTS to the list of host '
-            'names or IP addresses under which your server is accessible. '
-            'For example, in settings.py:\n\n'
-            '    import os\n'
-            '    ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(" ")\n\n'
-            'And in deploy.yml:\n\n'
-            '    services:\n'
-            '      web:\n'
-            '        type: django\n'
-            '      env:\n'
-            '        clear:\n'
-            f'          ALLOWED_HOSTS: "example.com"'
-        )
-
-        with self.update_deploy_yml() as deploy_yml:
             deploy_yml['services']['web']['env']['clear']['ALLOWED_HOSTS'] = \
                 'example.com'
 
@@ -341,7 +323,6 @@ class OnlineTest(_DjevopsTest):
 
     def _test_ssl(self):
         with self.update_deploy_yml() as deploy_yml:
-            deploy_yml['services']['web']['domains'] = [self.server_hostname]
             deploy_yml['services']['web']['env'] = {
                 'clear': {
                     'ALLOWED_HOSTS': self.server_hostname
@@ -417,7 +398,9 @@ class OnlineTest(_DjevopsTest):
         git('push')
         deploy(VERBOSE)
 
-        response = requests.get(f'http://{self.server_ip}/{test_txt_relpath}')
+        response = requests.get(
+            f'https://{self.server_hostname}/{test_txt_relpath}'
+        )
         self.assertEqual(200, response.status_code)
         self.assertEqual(test_content, response.text)
 

@@ -1,5 +1,7 @@
+from ipaddress import ip_address
 from subprocess import run, PIPE, STDOUT, CalledProcessError
 
+import re
 import sys
 
 def copy_with_replace(source, target, replacements):
@@ -45,3 +47,13 @@ def get_apt_install_cmd(packages):
         'dpkg -s %s >/dev/null 2>&1 || { %s || { apt-get update -qq && %s; }; }'
         % (packages, install_cmd, install_cmd)
     )
+
+def is_domain(host):
+    return re.match(r'[a-zA-Z][a-zA-Z0-9-]*(\.[a-zA-Z][a-zA-Z0-9-]*)+', host)
+
+def is_ip(host):
+    try:
+        ip_address(host)
+        return True
+    except ValueError:
+        return False

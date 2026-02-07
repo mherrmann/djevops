@@ -3,7 +3,7 @@ from djevops.config import get_services_users_envs, SQLITE_DB_FILE
 from djevops.remote.actions import install_python_deps, migrate_db, \
     collect_static_files, get_django_setting
 from djevops.remote.scaffold import get_deploy_config, get_secrets
-from djevops.util import copy_with_replace, get_apt_install_cmd
+from djevops.util import copy_with_replace, get_apt_install_cmd, is_domain
 from grp import getgrnam
 from os import chmod, makedirs, remove, chown, symlink
 from os.path import exists
@@ -24,14 +24,6 @@ def main():
     secrets = get_secrets()
 
     server_ip = config['server']
-    primary_domain = ''
-    services = config['services']
-    for service in services.values():
-        try:
-            primary_domain = service['domains'][0]
-            break
-        except (KeyError, IndexError):
-            pass
 
     git_server = config['git'].get('server', 'github.com')
     git_repo_name = config['git']['repo']
@@ -42,10 +34,6 @@ def main():
         git_repo_url = f'git@{git_server}:{git_repo_name}.git'
     else:
         git_repo_url = f'https://{git_server}/{git_repo_name}.git'
-
-    if primary_domain and _run('hostname') != primary_domain:
-        log('Setting hostname...')
-        _run(['hostnamectl', 'set-hostname', primary_domain])
 
     log('Installing git...')
     install('git-core')
@@ -115,11 +103,13 @@ def main():
     chmod('/var/lib/django', 0o770)
 
     log('Configuring services...')
+    primary_domain = ''
     created_users = set()
     admin_email = None
     service_domains = {}
     services_users_envs = get_services_users_envs(config, secrets)
     changed_bashrcs = set()
+    services = config['services']
     for service_name, (user, env) in services_users_envs.items():
         if user not in created_users:
             ensure_group_exists(user)
@@ -148,6 +138,16 @@ def main():
             created_users.add(user)
         service = services[service_name]
         if service['type'] == 'django':
+            if not primary_domain:
+                for host in get_django_setting('ALLOWED_HOSTS', env):
+                    if is_domain(host):
+                        primary_domain = host
+                        if _run('hostname') != primary_domain:
+                            log('Setting hostname...')
+                            _run([
+                                'hostnamectl', 'set-hostname', primary_domain
+                            ])
+                        break
             if not admin_email:
                 admins = get_django_setting('ADMINS', env)
                 if admins:
@@ -156,7 +156,10 @@ def main():
                         admin_email = admin_email[1]
             supervisor_conf_file = 'gunicorn.conf'
             nginx_available_file = '/etc/nginx/sites-available/' + service_name
-            domains = service.get('domains', [])
+            domains = [
+                host for host in get_django_setting('ALLOWED_HOSTS', env)
+                if is_domain(host)
+            ]
             copy_with_replace(
                 '/opt/djevops/conf/nginx/django', nginx_available_file,
                 {

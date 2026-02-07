@@ -127,19 +127,19 @@ def check_config(deploy_config, secrets):
             '        type: django'
         )
 
-    hosts = django_service.get('domains') or [server_ip]
-
     user_envs = get_services_users_envs(deploy_config, secrets)
     django_env = user_envs[django_service_name][1]
 
     has_db = bool(deploy_config.get('db'))
 
-    bin_dir = join(dirname(dirname(__file__)), 'bin')
+    project_root = dirname(dirname(__file__))
+    bin_dir = join(project_root, 'bin')
     error_msg = run_in_django_shell([
         'import sys',
+        f"sys.path.append('{project_root}')",
         f"sys.path.append('{bin_dir}')",
         'from check_django_settings import main',
-        f'main({hosts!r}, {has_db})',
+        f'main({server_ip!r}, {has_db})',
     ], env=django_env)
     if error_msg:
         raise CommandError(error_msg)
