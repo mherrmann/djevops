@@ -57,16 +57,14 @@ Upper-case values such as `GIT_REPO_PRIVKEY` need to be specified as constants
 in file `djevops/secrets.py`.
 
 Fill in your preferred values and run `djevops deploy`. djevops then clones your
-Git repo on the server and starts (and monitors) all services. Any domains you
-supply in `ALLOWED_HOSTS` must have DNS A records pointing at the same IP as
-`server`.
+Git repo on the server and starts (and monitors) all services.
 
 <details>
 <summary>SSL certificates</summary>
 
 djevops generates and manages SSL certificates for any domains you specify in
-Django setting `ALLOWED_HOSTS`. Of course, the domains need to be tied to your
-server's IP address.
+Django setting `ALLOWED_HOSTS`. The domains need to be tied to your server's IP
+address.
 </details>
 
 <details>
