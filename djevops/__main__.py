@@ -137,8 +137,7 @@ def check_config(deploy_config, secrets):
     error_msg = run_in_django_shell([
         'import sys',
         f"sys.path.append('{project_root}')",
-        f"sys.path.append('{bin_dir}')",
-        'from check_django_settings import main',
+        'from djevops.check_django_settings import main',
         f'main({server_ip!r}, {has_db})',
     ], env=django_env)
     if error_msg:
