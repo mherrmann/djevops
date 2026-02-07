@@ -58,6 +58,8 @@ in file `djevops/secrets.py`.
 Fill in your preferred values and run `djevops deploy`. djevops then clones your
 Git repo on the server and starts (and monitors) all services.
 
+## Features
+
 <details>
 <summary>SSL certificates</summary>
 
@@ -77,6 +79,31 @@ ADMINS = [('Your Name', 'your@email.com)]
 ```
 
 This requires Django setting `DEBUG` to be `False`.
+</details>
+
+<details>
+<summary>Database backups</summary>
+
+You can set up automatic database backups by adding a `backup` element to the
+`db` section in djevops' `config.yml`. For example:
+
+```
+db:
+  type: sqlite
+  backup:
+    type: s3
+    bucket: mybackup
+    access-key-id: S3_BACKUP_ACCESS_KEY
+    secret-access-key: S3_BACKUP_SECRET_KEY
+    path: db
+    region: us-east-1
+```
+
+djevops uses [Litestream](https://litestream.io/) for SQLite backups. Litestream
+can maintain backups in S3, Azure Blob Storage and many others. The keys you add
+to the `backup` element above get copied into a `replica` element in
+Litestream's config. For more information about the available options, please
+see [Litestream's documentation](https://litestream.io/reference/config/).
 </details>
 
 ## Development

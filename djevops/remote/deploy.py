@@ -9,11 +9,13 @@ from os import chmod, makedirs, remove, chown, symlink
 from os.path import exists
 from pwd import getpwnam
 from random import randint
-from shutil import rmtree, copyfile
+from shutil import rmtree, copyfile, which
 from subprocess import PIPE, STDOUT, run, CalledProcessError, DEVNULL
 from time import sleep
+from urllib.request import urlretrieve
 
 import sys
+import yaml
 
 ERROR_ALREADY_EXISTS = 9
 TERMINAL_COLOR_SUCCESS = 93
@@ -313,11 +315,32 @@ def main():
         log('Installing Redis...')
         install('redis-server')
 
-    if config.get('db'):
+    db = config.get('db')
+    if db:
         log('Migrating database...')
         migrate_db()
         _chown(SQLITE_DB_FILE, group_name=django_group)
         chmod(SQLITE_DB_FILE, 0o660)
+        backup = db.get('backup')
+        if backup:
+            if not which('litestream'):
+                log('Installing Litestream...')
+                deb_path, _ = urlretrieve(
+                    'https://github.com/benbjohnson/litestream/releases/'
+                    'download/v0.5.3/litestream-0.5.3-linux-x86_64.deb'
+                )
+                _run(['dpkg', '-i', deb_path])
+                remove(deb_path)
+            litestream_config = {
+                'dbs': [{
+                    'path': SQLITE_DB_FILE,
+                    'replica': backup
+                }]
+            }
+            with open('/etc/litestream.yml', 'w') as f:
+                yaml.safe_dump(litestream_config, f)
+            _run('systemctl enable litestream')
+            _run('systemctl start litestream')
 
     log('Creating directories for static files...')
     makedirs('/srv/static', exist_ok=True)

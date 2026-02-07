@@ -1,5 +1,7 @@
-from contextlib import contextmanager
+from botocore.config import Config
+from contextlib import closing, contextmanager
 from djevops.__main__ import CommandError, init, deploy
+from djevops.config import SQLITE_DB_FILE
 from djevops.remote.actions import MANAGE_SH
 from djevops.util import git, run_silently
 from dnsimple import Client as DNSimpleClient
@@ -10,6 +12,7 @@ from hcloud.images import Image
 from hcloud.server_types import ServerType
 from imaplib import IMAP4_SSL
 from os import chdir, remove
+from os.path import basename
 from pathlib import Path
 from shlex import quote
 from subprocess import DEVNULL, run, CalledProcessError
@@ -17,10 +20,12 @@ from tempfile import NamedTemporaryFile, TemporaryDirectory
 from time import time, sleep
 from unittest import TestCase
 
+import boto3
 import celery
 import django
 import os
 import requests
+import sqlite3
 import yaml
 
 
@@ -30,6 +35,14 @@ DNSIMPLE_API_TOKEN = os.environ['DNSIMPLE_API_TOKEN']
 DNSIMPLE_ACCOUNT_ID = os.environ['DNSIMPLE_ACCOUNT_ID']
 TEST_REPO_URL = os.environ['TEST_REPO_URL']
 
+S3_BUCKET = os.environ['S3_BUCKET']
+S3_ACCESS_KEY = os.environ['S3_ACCESS_KEY']
+S3_SECRET_KEY = os.environ['S3_SECRET_KEY']
+S3_REGION = os.environ['S3_REGION']
+S3_ENDPOINT = os.environ['S3_ENDPOINT']
+
+S3_DB_BACKUP_DIR = 'db-backup'
+
 # Can use (non-business) Gmail for these: smtp.gmail.com, imap.gmail.com.
 # The user is the email address. The password is an "app password".
 SMTP_HOST = os.environ['SMTP_HOST']
@@ -37,10 +50,11 @@ IMAP_HOST = os.environ['IMAP_HOST']
 EMAIL_USER = os.environ['EMAIL_USER']
 EMAIL_PASSWORD = os.environ['EMAIL_PASSWORD']
 
-GUNICORN_VERSION = '24.1.1'
-
 VERBOSE = False
 
+GUNICORN_VERSION = '24.1.1'
+
+SUPERUSER_EMAIL = 'admin@admin.com'
 
 class _TestInTempDir(TestCase):
 
@@ -265,6 +279,8 @@ class OnlineTest(_DjevopsTest):
 
                 self.server_hostname = \
                     f'{self.test_name}.{DNSIMPLE_TEST_DOMAIN}'
+                # In case they're left over from a previous test run:
+                self._delete_db_backups_from_s3()
                 self.init_test_app()
             except:
                 self._delete_dns_record()
@@ -278,6 +294,7 @@ class OnlineTest(_DjevopsTest):
         os.environ.pop('DJEVOPS_SSH_COMMAND')
         self._delete_server()
         self._delete_dns_record()
+        self._delete_db_backups_from_s3()
         remove(self.known_hosts_file)
         super().tearDown()
 
@@ -311,6 +328,7 @@ class OnlineTest(_DjevopsTest):
         self._test_http()
         self._test_ssl()
         self._test_db()
+        self._test_db_backup()
         self._test_email()
         self._test_static_files()
         self._test_celery()
@@ -348,9 +366,41 @@ class OnlineTest(_DjevopsTest):
         # Test that the `web` user can write to the database:
         create_superuser_cmd = (
             "DJANGO_SUPERUSER_USERNAME=admin DJANGO_SUPERUSER_PASSWORD=admin "
-            f"{MANAGE_SH} createsuperuser --email admin@admin.com --noinput"
+            f"{MANAGE_SH} createsuperuser --email {SUPERUSER_EMAIL} --noinput"
         )
         self._ssh(f"su -c '{create_superuser_cmd}' - web")
+
+    def _test_db_backup(self):
+        with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['db'] = {
+                'type': 'sqlite',
+                'backup': {
+                    'type': 's3',
+                    'bucket': S3_BUCKET,
+                    'access-key-id': S3_ACCESS_KEY,
+                    'secret-access-key': S3_SECRET_KEY,
+                    'path': S3_DB_BACKUP_DIR,
+                    'region': S3_REGION,
+                    'endpoint': S3_ENDPOINT,
+                    'force-path-style': True,
+                    'sign-payload': True
+                }
+            }
+        deploy(VERBOSE)
+        litestream_yml_contents = self._ssh('cat /etc/litestream.yml')
+        with TemporaryDirectory() as tmp_dir:
+            litestream_yml = Path(tmp_dir) / 'litestream.yml'
+            litestream_yml.write_text(litestream_yml_contents)
+            db_file = Path(tmp_dir) / 'db.sqlite3'
+            run_silently([
+                'litestream', 'restore', '-config', litestream_yml, '-o',
+                db_file, SQLITE_DB_FILE
+            ])
+            with closing(sqlite3.connect(db_file)) as connection:
+                cursor = connection.execute(
+                    "SELECT 1 FROM auth_user WHERE email=?", (SUPERUSER_EMAIL,)
+                )
+                self.assertIsNotNone(cursor.fetchone())
 
     def _test_email(self):
         with self.update_deploy_yml() as deploy_yml:
@@ -471,6 +521,12 @@ class OnlineTest(_DjevopsTest):
         except Exception as e:
             print(f'Warning: Failed to delete server {self.server}: {e}')
 
+    def _delete_db_backups_from_s3(self):
+        delete_directory_from_s3(
+            S3_REGION, S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET,
+            S3_DB_BACKUP_DIR
+        )
+
     def _delete_remote_branch_if_exists(self, name):
         try:
             git('push', 'origin', '--delete', name)
@@ -569,3 +625,23 @@ def wait_for_email(
                 return True
         sleep(1)
     return False
+
+def delete_directory_from_s3(
+    region, endpoint, access_key, secret_key, bucket, prefix
+):
+    config = Config(s3={
+        'addressing_style': 'path',
+        'payload_signing_enabled': True
+    })
+    s3 = boto3.client(
+        's3',
+        region_name=region,
+        endpoint_url='https://' + endpoint,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        config=config
+    )
+    paginator = s3.get_paginator('list_objects_v2')
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        objects = [{'Key': obj['Key']} for obj in page.get('Contents', [])]
+        s3.delete_objects(Bucket=bucket, Delete={'Objects': objects})
