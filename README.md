@@ -24,6 +24,7 @@ services:
         ALLOWED_HOSTS: your.website.com
       secret:
         - DJANGO_SECRET_KEY
+
 db:
   type: sqlite
 
