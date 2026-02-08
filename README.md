@@ -44,13 +44,13 @@ mail:
   password: SMTP_PASSWORD
 ```
 
-Upper-case values such as `DJANGO_SECRET_KEY` need to be specified as constants
-in file `djevops/secrets.py`.
+Secrets such as `DJANGO_SECRET_KEY` or `SMTP_PASSWORD` can be specified as
+constants in file `djevops/secrets.py`.
 
 Most config values are optional. Fill in the ones you want and run
 `djevops deploy`. djevops then clones your Git repo on the `server` and starts
-(and monitors) all services. To release changes you've pushed to your Django
-app's Git repository, simply execute `djevops deploy` again.
+(and monitors) all services. As you work on your Django app and push new commits
+to Git, simply run `djevops deploy` again to push them to your server.
 
 ## Features
 
@@ -130,7 +130,6 @@ redis:
 This setup lets you run Python functions asynchronously and on a schedule such
 as "every five hours". The service of type `celery` also spawns the necessary
 `beat` scheduler.
-
 </details>
 
 ## Development
