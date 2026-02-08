@@ -12,7 +12,6 @@ from hcloud.images import Image
 from hcloud.server_types import ServerType
 from imaplib import IMAP4_SSL
 from os import chdir, remove
-from os.path import basename
 from pathlib import Path
 from shlex import quote
 from subprocess import DEVNULL, run, CalledProcessError
