@@ -3,7 +3,7 @@ from djevops.util import git, get_apt_install_cmd, run_in_django_shell, \
     run_silently
 from functools import partial
 from os import remove, makedirs
-from os.path import dirname, exists, join
+from os.path import dirname, exists
 from runpy import run_path
 from shlex import quote
 from subprocess import run
@@ -132,14 +132,12 @@ def check_config(deploy_config, secrets):
 
     has_db = bool(deploy_config.get('db'))
 
-    project_root = dirname(dirname(__file__))
-    bin_dir = join(project_root, 'bin')
+    # Ensure `djevops.check_django_settings` is loadable:
+    django_shell_env = django_env | {'PYTHONPATH': ':'.join(sys.path)}
     error_msg = run_in_django_shell([
-        'import sys',
-        f"sys.path.append('{project_root}')",
         'from djevops.check_django_settings import main',
         f'main({server_ip!r}, {has_db})',
-    ], env=django_env)
+    ], env=django_shell_env)
     if error_msg:
         raise CommandError(error_msg)
 
@@ -152,13 +150,15 @@ def install_djevops_on_server(user, host, verbose):
     )
     rsync(
         '-ra',
-        dirname(dirname(__file__)) + '/',
+        dirname(__file__) + '/',
         f'{user}@{host}:/opt/djevops/',
         "--include=**.gitignore",
         "--exclude=/.git",
+        "--exclude=.venv",
         "--filter=:- .gitignore",
         "--delete-after"
     )
+    ssh_('cd /opt/djevops && ~/.local/bin/uv sync')
 
 def get_secrets(path):
     if not exists(path):
@@ -168,9 +168,7 @@ def get_secrets(path):
     }
 
 def run_with_djevops_venv(user, host, cmd, verbose):
-    ssh(
-        user, host, f'~/.local/bin/uv run --project /opt/djevops {cmd}', verbose
-    )
+    ssh(user, host, f'/opt/djevops/.venv/bin/{cmd}', verbose)
 
 def rsync(*args):
     ssh_cmd = get_ssh_command()
@@ -188,7 +186,7 @@ def get_ssh_command():
     except KeyError:
         return 'ssh'
 
-if __name__ == '__main__':
+def main():
     if len(sys.argv) < 2 or len(sys.argv) > 3:
         print('Usage: djevops init|deploy [--verbose]')
         sys.exit(0)
@@ -204,3 +202,6 @@ if __name__ == '__main__':
     except CommandError as e:
         sys.stderr.write(e.args[0] + '\n')
         sys.exit(1)
+
+if __name__ == '__main__':
+    main()

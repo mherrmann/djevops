@@ -4,7 +4,16 @@ version = "0.0.1"
 description = "Host Django without Docker"
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+authors = [{name = "Michael Herrmann"}]
 dependencies = ["PyYAML==6.0.3"]
+
+[project.scripts]
+djevops = "djevops.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/mherrmann/djevops"
+Repository = "https://github.com/mherrmann/djevops"
 
 [project.optional-dependencies]
 test = [
@@ -21,4 +30,8 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
+where = [".."]
 include = ["djevops*"]
+
+[tool.setuptools.package-data]
+djevops = ["bin/*", "conf/**/*", "conf/.*"]

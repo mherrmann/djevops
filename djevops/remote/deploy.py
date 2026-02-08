@@ -178,7 +178,7 @@ def main():
                 nginx_available_file, '/etc/nginx/sites-enabled/' + service_name
             )
             copy_with_replace(
-                f'/opt/djevops/conf/logrotate/nginx',
+                '/opt/djevops/conf/logrotate/nginx',
                 f'/etc/logrotate.d/{service_name}-nginx',
                 {'$SERVICE': service_name}
             )
@@ -195,7 +195,7 @@ def main():
             replacements
         )
         copy_with_replace(
-            f'/opt/djevops/conf/logrotate/service',
+            '/opt/djevops/conf/logrotate/service',
             f'/etc/logrotate.d/{service_name}',
             replacements
         )
