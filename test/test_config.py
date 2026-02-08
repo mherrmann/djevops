@@ -1,4 +1,5 @@
-from djevops.config import get_services_users_envs, DEFAULT_ENV
+from djevops.config import get_services_users_envs, DEFAULT_ENV, \
+    interpolate_secrets
 from unittest import TestCase
 
 
@@ -85,4 +86,13 @@ class GetServicesUsersEnvsTest(TestCase):
         self.assertEqual(
             expected_with_defaults,
             get_services_users_envs(config, secrets or {})
+        )
+
+
+class InterpolateSecretsTest(TestCase):
+
+    def test_interpolate_secrets(self):
+        self.assertEqual(
+            {'test': 'secret23'},
+            interpolate_secrets({'test': 'API_KEY'}, {'API_KEY': 'secret23'})
         )

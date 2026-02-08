@@ -101,6 +101,11 @@ class _DjevopsTest(_TestInTempDir):
         if do_commit:
             commit(settings_py, 'Add to settings.py')
 
+    def add_to_secrets(self, dict_):
+        with open('djevops/secrets.py', 'a') as f:
+            for key, value in dict_.items():
+                f.write(f'{key} = {value!r}\n')
+
     @contextmanager
     def _expect_command_error(self, message):
         with self.assertRaises(CommandError) as cm:
@@ -352,8 +357,12 @@ class OnlineTest(_DjevopsTest):
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['db'] = {
                 'type': 'sqlite',
-                'backup': self._get_litestream_config()
+                'backup': self._get_litestream_config(plain_secrets=False)
             }
+        self.add_to_secrets({
+            'S3_ACCESS_KEY': S3_ACCESS_KEY,
+            'S3_SECRET_KEY': S3_SECRET_KEY
+        })
         self.add_to_settings([
             "DATABASES['default']['NAME'] = os.getenv('SQLITE_DB_FILE') "
             "or DATABASES['default']['NAME']"
@@ -414,12 +423,14 @@ class OnlineTest(_DjevopsTest):
             with closing(sqlite3.connect(db_file)) as connection:
                 return connection.execute(sql).fetchone()[0]
 
-    def _get_litestream_config(self):
+    def _get_litestream_config(self, plain_secrets=True):
         return {
             'type': 's3',
             'bucket': S3_BUCKET,
-            'access-key-id': S3_ACCESS_KEY,
-            'secret-access-key': S3_SECRET_KEY,
+            'access-key-id': \
+                S3_ACCESS_KEY if plain_secrets else 'S3_ACCESS_KEY',
+            'secret-access-key': \
+                S3_SECRET_KEY if plain_secrets else 'S3_SECRET_KEY',
             'path': S3_DB_BACKUP_DIR,
             'region': S3_REGION,
             'endpoint': S3_ENDPOINT,
@@ -435,9 +446,10 @@ class OnlineTest(_DjevopsTest):
                 'password': 'EMAIL_PASSWORD',
             }
 
-        with open('djevops/secrets.py', 'w') as f:
-            f.write(f'EMAIL_USER = {EMAIL_USER!r}\n')
-            f.write(f'EMAIL_PASSWORD = {EMAIL_PASSWORD!r}\n')
+        self.add_to_secrets({
+            'EMAIL_USER': EMAIL_USER,
+            'EMAIL_PASSWORD': EMAIL_PASSWORD
+        })
 
         git('push')
         deploy(VERBOSE)

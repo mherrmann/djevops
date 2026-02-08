@@ -34,3 +34,9 @@ def get_django_service(config):
         if service['type'] == 'django':
             return service_name, service
     raise LookupError('No Django service found')
+
+def interpolate_secrets(dict_, secrets):
+    return {
+        k: secrets.get(v, v)
+        for k, v in dict_.items()
+    }
