@@ -15,25 +15,24 @@ Other features of djevops include:
  * Secure defaults
  * Automatic OS updates
 
-To get started with djevops, all you need is a Linux VPS running Ubuntu or
-Debian. Install djevops on your local machine with `pip install djevops`. Then,
-execute `djevops init` in your Django app's Git repository. You get a config
-file that looks similar to the following:
+To get started with djevops, all you need is SSH root access to a Linux VPS
+running Ubuntu or Debian. Install djevops on your local machine with
+`pip install djevops`. Then, execute `djevops init` in your Django app's Git
+repository. You get a config file that looks similar to the following:
 
 ```
 server: 1.2.3.4
 
 git:
-  repo: mherrmann/djangotutorial
+  repo: githubuser/reponame
   branch: main
-  key: GIT_REPO_PRIVKEY
 
 services:
   web:
     type: django
     env:
       clear:
-        ALLOWED_HOSTS: djangotutorial.herrmann.io
+        ALLOWED_HOSTS: your.website.com
       secret:
         - DJANGO_SECRET_KEY
   celery:
@@ -52,27 +51,29 @@ mail:
   password: SMTP_PASSWORD
 ```
 
-Upper-case values such as `GIT_REPO_PRIVKEY` need to be specified as constants
+Upper-case values such as `DJANGO_SECRET_KEY` need to be specified as constants
 in file `djevops/secrets.py`.
 
-Fill in your preferred values and run `djevops deploy`. djevops then clones your
-Git repo on the server and starts (and monitors) all services.
+Most config values are optional. Fill in the ones you want and run
+`djevops deploy`. djevops then clones your Git repo on the `server` and starts
+(and monitors) all services.
 
 ## Features
 
 <details>
 <summary>SSL certificates</summary>
 
-djevops generates and manages SSL certificates for any domains you specify in
-Django setting `ALLOWED_HOSTS`. The domains need to be tied to your server's IP
-address.
+djevops generates and automatically renews SSL certificates for any domains you
+specify in Django setting `ALLOWED_HOSTS`. The domains need to be tied to your
+server's IP address.
 </details>
 
 <details>
 <summary>Error emails</summary>
 
-To receive emails when errors occur on your server, supply Django's `ADMINS`
-setting in addition to the `mail` config above. For example, in `settings.py`:
+If you filled in the `mail` section in the config file, then you can configure
+Django to email you when errors occur on your server. To do so, just set the
+Django `ADMINS` setting. For example, in `settings.py`:
 
 ```
 ADMINS = [('Your Name', 'your@email.com)]
@@ -85,7 +86,7 @@ This requires Django setting `DEBUG` to be `False`.
 <summary>Database backups</summary>
 
 You can set up automatic database backups by adding a `backup` element to the
-`db` section in djevops' `config.yml`. For example:
+`db` section in the djevops config file. For example:
 
 ```
 db:
@@ -99,10 +100,13 @@ db:
     region: us-east-1
 ```
 
+Backups are created continuously while your server is running. If you ever
+re-install your server, then the latest backup is automatically restored.
+
 djevops uses [Litestream](https://litestream.io/) for SQLite backups. Litestream
-can maintain backups in S3, Azure Blob Storage and many others. The keys you add
-to the `backup` element above get copied into a `replica` element in
-Litestream's config. For more information about the available options, please
+can store backups in S3, Azure Blob Storage and many others. The keys you add to
+the `backup` element above get copied into a `replica` element in Litestream's
+config. For more information about the available options, please
 see [Litestream's documentation](https://litestream.io/reference/config/).
 </details>
 
