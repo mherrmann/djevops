@@ -319,10 +319,6 @@ def main():
 
     db = config.get('db')
     if db:
-        log('Migrating database...')
-        migrate_db()
-        _chown(SQLITE_DB_FILE, group_name=django_group)
-        chmod(SQLITE_DB_FILE, 0o660)
         backup = db.get('backup')
         if backup:
             if not which('litestream'):
@@ -342,8 +338,15 @@ def main():
             }
             with open('/etc/litestream.yml', 'w') as f:
                 yaml.safe_dump(litestream_config, f)
+            if not exists(SQLITE_DB_FILE):
+                log('Restoring database backup...')
+                _run(['litestream', 'restore', SQLITE_DB_FILE])
             _run('systemctl enable litestream')
             _run('systemctl start litestream')
+        log('Migrating database...')
+        migrate_db()
+        _chown(SQLITE_DB_FILE, group_name=django_group)
+        chmod(SQLITE_DB_FILE, 0o660)
 
     log('Creating directories for static files...')
     makedirs('/srv/static', exist_ok=True)

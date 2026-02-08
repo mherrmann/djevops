@@ -16,7 +16,7 @@ from pathlib import Path
 from shlex import quote
 from subprocess import DEVNULL, run, CalledProcessError
 from tempfile import NamedTemporaryFile, TemporaryDirectory
-from time import time, sleep
+from time import time, sleep, monotonic
 from unittest import TestCase
 
 import boto3
@@ -52,8 +52,6 @@ EMAIL_PASSWORD = os.environ['EMAIL_PASSWORD']
 VERBOSE = False
 
 GUNICORN_VERSION = '24.1.1'
-
-SUPERUSER_EMAIL = 'admin@admin.com'
 
 class _TestInTempDir(TestCase):
 
@@ -251,7 +249,7 @@ class OnlineTest(_DjevopsTest):
     def setUp(self):
         super().setUp()
 
-        self.test_name = f'djevops-test-{int(time())}'
+        self.test_name = f'djevopstest{int(time())}'
 
         with NamedTemporaryFile(delete=False) as known_hosts_file:
             self.known_hosts_file = known_hosts_file.name
@@ -274,6 +272,7 @@ class OnlineTest(_DjevopsTest):
                 self.ssh_command = \
                     f'ssh -i {self.SSH_PRIVATE_KEY} ' \
                     f'-o UserKnownHostsFile={self.known_hosts_file}'
+                self.users_with_ssh_access = ['root']
                 os.environ['DJEVOPS_SSH_COMMAND'] = self.ssh_command
 
                 self.server_hostname = \
@@ -327,7 +326,6 @@ class OnlineTest(_DjevopsTest):
         self._test_http()
         self._test_ssl()
         self._test_db()
-        self._test_db_backup()
         self._test_email()
         self._test_static_files()
         self._test_celery()
@@ -352,40 +350,58 @@ class OnlineTest(_DjevopsTest):
 
     def _test_db(self):
         with self.update_deploy_yml() as deploy_yml:
-            deploy_yml['db'] = {'type': 'sqlite'}
-
+            deploy_yml['db'] = {
+                'type': 'sqlite',
+                'backup': self._get_litestream_config()
+            }
         self.add_to_settings([
             "DATABASES['default']['NAME'] = os.getenv('SQLITE_DB_FILE') "
             "or DATABASES['default']['NAME']"
         ])
-
         git('push')
+
+        table = self.test_name
+        self._upload_mock_db_backup_to_s3(f"CREATE TABLE {table}(id)")
+
         deploy(VERBOSE)
+
+        count_rows = f"SELECT COUNT(*) FROM {table}"
+        # The following line tests that the backup was restored. (If it weren't,
+        # then the command would fail because the table wouldn't exist.)
+        num = self._execute_remote_sql(count_rows, 'web')
+        # Sanity check. We haven't yet inserted any rows.
+        self.assertEqual(0, num)
 
         # Test that the `web` user can write to the database:
-        create_superuser_cmd = (
-            "DJANGO_SUPERUSER_USERNAME=admin DJANGO_SUPERUSER_PASSWORD=admin "
-            f"{MANAGE_SH} createsuperuser --email {SUPERUSER_EMAIL} --noinput"
-        )
-        self._ssh(f"su -c '{create_superuser_cmd}' - web")
+        self._execute_remote_sql(f"INSERT INTO {table} VALUES (1)", 'web')
 
-    def _test_db_backup(self):
-        with self.update_deploy_yml() as deploy_yml:
-            deploy_yml['db'] = {
-                'type': 'sqlite',
-                'backup': {
-                    'type': 's3',
-                    'bucket': S3_BUCKET,
-                    'access-key-id': S3_ACCESS_KEY,
-                    'secret-access-key': S3_SECRET_KEY,
-                    'path': S3_DB_BACKUP_DIR,
-                    'region': S3_REGION,
-                    'endpoint': S3_ENDPOINT,
-                    'force-path-style': True,
-                    'sign-payload': True
-                }
-            }
-        deploy(VERBOSE)
+        end_time = monotonic() + 60
+        while monotonic() < end_time:
+            if self._execute_against_db_backup(count_rows) == 1:
+                break
+            sleep(1)
+        else:
+            self.fail(f'Backup was not created')
+
+    def _upload_mock_db_backup_to_s3(self, sql):
+        with TemporaryDirectory() as tmp_dir:
+            db_file = Path(tmp_dir) / 'db.sqlite3'
+            con = sqlite3.connect(db_file)
+            con.execute(sql)
+            con.commit()
+            con.close()
+            litestream_yml = Path(tmp_dir) / 'litestream.yml'
+            litestream_yml.write_text(yaml.dump({
+                'dbs': [{
+                    'path': str(db_file),
+                    'replica': self._get_litestream_config()
+                }]
+            }))
+            run_silently([
+                'litestream', 'replicate', '-once', '-config', litestream_yml
+            ])
+
+    def _execute_against_db_backup(self, sql):
         litestream_yml_contents = self._ssh('cat /etc/litestream.yml')
         with TemporaryDirectory() as tmp_dir:
             litestream_yml = Path(tmp_dir) / 'litestream.yml'
@@ -396,10 +412,20 @@ class OnlineTest(_DjevopsTest):
                 db_file, SQLITE_DB_FILE
             ])
             with closing(sqlite3.connect(db_file)) as connection:
-                cursor = connection.execute(
-                    "SELECT 1 FROM auth_user WHERE email=?", (SUPERUSER_EMAIL,)
-                )
-                self.assertIsNotNone(cursor.fetchone())
+                return connection.execute(sql).fetchone()[0]
+
+    def _get_litestream_config(self):
+        return {
+            'type': 's3',
+            'bucket': S3_BUCKET,
+            'access-key-id': S3_ACCESS_KEY,
+            'secret-access-key': S3_SECRET_KEY,
+            'path': S3_DB_BACKUP_DIR,
+            'region': S3_REGION,
+            'endpoint': S3_ENDPOINT,
+            'force-path-style': True,
+            'sign-payload': True
+        }
 
     def _test_email(self):
         with self.update_deploy_yml() as deploy_yml:
@@ -416,13 +442,12 @@ class OnlineTest(_DjevopsTest):
         git('push')
         deploy(VERBOSE)
 
-        send_mail_script = (
-            f'from django.core.mail import send_mail; '
-            f'send_mail({self.test_name!r}, "Test body", '
-            f'{EMAIL_USER!r}, [{EMAIL_USER!r}])'
-        )
-        remote_cmd = f"{MANAGE_SH} shell -c {quote(send_mail_script)}"
-        self._ssh(remote_cmd)
+        send_mail_script = [
+            "from django.core.mail import send_mail",
+            f"send_mail({self.test_name!r}, 'Test body', {EMAIL_USER!r}, "
+            f"[{EMAIL_USER!r}])"
+        ]
+        self._execute_remote_django_shell(send_mail_script, 'web')
 
         email_found = wait_for_email(
             IMAP_HOST, EMAIL_USER, EMAIL_PASSWORD, self.test_name, delete=True
@@ -500,12 +525,12 @@ class OnlineTest(_DjevopsTest):
         git('push')
         deploy(VERBOSE)
 
-        run_task_script = (
-            f'from {self.DJANGO_APP_NAME}.tasks import test_task; '
-            'result = test_task.delay(); '
+        run_task_script = [
+            f'from {self.DJANGO_APP_NAME}.tasks import test_task',
+            'result = test_task.delay()',
             'print(result.get(timeout=10))'
-        )
-        output = self._ssh(f"{MANAGE_SH} shell -c {quote(run_task_script)}")
+        ]
+        output = self._execute_remote_django_shell(run_task_script, 'web')
         self.assertIn('celery works', output)
 
     def _delete_dns_record(self):
@@ -532,10 +557,36 @@ class OnlineTest(_DjevopsTest):
         except CalledProcessError:
             pass
 
-    def _ssh(self, cmd):
+    def _execute_remote_sql(self, sql, user):
+        django_cmd = [
+            "from django.db import connection",
+            f"result = connection.cursor().execute('{sql}').fetchone()",
+            "print(result[0] if result is not None else '')"
+        ]
+        output = self._execute_remote_django_shell(django_cmd, user)
+        if output.strip():
+            return int(output)
+
+    def _execute_remote_django_shell(self, cmds, user):
+        return self._ssh(f"{MANAGE_SH} shell -c {quote('; '.join(cmds))}", user)
+
+    def _ssh(self, cmd, user='root'):
+        if user not in self.users_with_ssh_access:
+            self._enable_ssh_access(user)
+            self.users_with_ssh_access.append(user)
         return run_silently(
-            f'{self.ssh_command} root@{self.server_ip} {quote(cmd)}', shell=True
+            f'{self.ssh_command} {user}@{self.server_ip} {quote(cmd)}',
+            shell=True
         )
+
+    def _enable_ssh_access(self, user):
+        public_key = Path(self.SSH_PUBLIC_KEY).read_text().strip()
+        cmd_as_user = (
+            f"cd /home/{user} && mkdir -p .ssh && chmod 700 .ssh && "
+            f"echo {quote(public_key)} >> .ssh/authorized_keys && "
+            f"chmod 600 .ssh/authorized_keys"
+        )
+        self._ssh(f'su -c {quote(cmd_as_user)} - {user}')
 
 def ensure_hetzner_ssh_key_exists(api_token, ssh_key_content, name):
     hetzner = HetznerClient(token=api_token)
@@ -586,8 +637,8 @@ class DNSimpleARecord:
 def wait_for_server_to_be_ready(
     user, host, ssh_key_path, known_hosts_file, timeout_secs=60
 ):
-    start_time = time()
-    while time() < start_time + timeout_secs:
+    end_time = monotonic() + timeout_secs
+    while monotonic() < end_time:
         cp = run([
             'ssh', '-i', str(ssh_key_path),
             '-o', 'StrictHostKeyChecking=accept-new',
@@ -610,8 +661,8 @@ def commit(file_path, message):
 def wait_for_email(
     imap_host, user, password, subject, delete=False, timeout_secs=60
 ):
-    start_time = time()
-    while time() < start_time + timeout_secs:
+    end_time = monotonic() + timeout_secs
+    while monotonic() < end_time:
         with IMAP4_SSL(imap_host) as imap:
             imap.login(user, password)
             imap.select('INBOX')
