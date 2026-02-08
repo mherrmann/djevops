@@ -4,17 +4,6 @@ djevops is a command-line tool for deploying Django web apps to Linux VPSs.
 Unlike other tools, djevops runs Django "on bare metal". That is, without
 Docker. This makes development faster and easier.
 
-Other features of djevops include:
-
- * SSL certificate handling and renewals
- * Emails to admins when server errors occur
- * Automatic database backups
- * Built-in support for Celery and Redis
- * Easy access to log files
- * Secret handling
- * Secure defaults
- * Automatic OS updates
-
 To get started with djevops, all you need is SSH root access to a Linux VPS
 running Ubuntu or Debian. Install djevops on your local machine with
 `pip install djevops`. Then, execute `djevops init` in your Django app's Git
@@ -128,8 +117,56 @@ redis:
 ```
 
 This setup lets you run Python functions asynchronously and on a schedule such
-as "every five hours". The service of type `celery` also spawns the necessary
+as "every five hours". The service of type `celery` also runs the necessary
 `beat` scheduler.
+</details>
+
+<details>
+<summary>Easy access to log files</summary>
+
+djevops writes the log file for each service to `/var/log/<service>.log`. To
+read it, simply SSH into the server and do `less`, `tail -f`, etc. To prevent
+log files from filling up your server's disk space, djevops also rotates and
+compresses log files.
+</details>
+
+<details>
+<summary>Secret handling</summary>
+
+Very often, you have secrets that you need on the server but should not commit
+to Git. djevops lets you specify such values in the file `djevops/secrets.py`,
+and refer to them from your config file. The way this works is that `secrets.py`
+gets executed on your local machine, and the produced values then get uploaded
+as constants to the server. This gives you a lot of flexibility. You can
+hardcode values in `secrets.py` and not commit that file to Git. Or you can for
+example make `secrets.py` read from environment variables that are available
+when you do `djevops deploy`:
+
+```
+import os
+MY_SECRET = os.environ['MY_SECRET']
+```
+
+You can also invoke password managers in `secrets.py`, etc.
+</details>
+
+<details>
+<summary>Secure defaults</summary>
+
+djevops uses secure defaults whenever possible. For example, each `service` runs
+as a separate user. This means that environment variables cannot leak from one
+service to another. djevops also makes sure that no unintended ports are open,
+such as for example port 25 when using Postfix for sending emails.
+</details>
+<details>
+<summary>Secure defaults</summary>
+
+<details>
+<summary>Automatic OS updates</summary>
+
+djevops sets up automatic OS updates to keep your server up-to-date and secure.
+This does not apply major version upgrades, which could introduce potentially
+breaking changes.
 </details>
 
 ## Development
