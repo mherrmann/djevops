@@ -49,12 +49,13 @@ in file `djevops/secrets.py`.
 
 Most config values are optional. Fill in the ones you want and run
 `djevops deploy`. djevops then clones your Git repo on the `server` and starts
-(and monitors) all services.
+(and monitors) all services. To release changes you've pushed to your Django
+app's Git repository, simply execute `djevops deploy` again.
 
 ## Features
 
 <details>
-<summary>SSL certificates</summary>
+<summary>Automatic SSL certificates</summary>
 
 djevops generates and automatically renews SSL certificates for any domains you
 specify in Django setting `ALLOWED_HOSTS`. The domains need to be tied to your
