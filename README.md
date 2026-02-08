@@ -126,15 +126,16 @@ services:
       inherit: web
 ```
 
-Many Django apps use Redis as Celery's backend. You can install Redis on the
-server with an empty `redis` block:
+To install Redis on the server (which many Django apps use as Celery's backend),
+add an empty `redis` block:
 
 ```
 redis:
 ```
 
 This setup lets you run Python functions asynchronously, or on a schedule (eg.
-"every five hours").
+"every five hours"). The service of type `celery` also spawns the necessary
+`beat` scheduler.
 
 </details>
 
