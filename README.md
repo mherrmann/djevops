@@ -39,7 +39,7 @@ constants in file `djevops/secrets.py`.
 Most config values are optional. Fill in the ones you want and run
 `djevops deploy`. djevops then clones your Git repo on the `server` and starts
 (and monitors) all services. As you work on your Django app and push new commits
-to Git, simply run `djevops deploy` again to push them to your server.
+to Git, simply run `djevops deploy` again to apply them to your server.
 
 ## Features
 
