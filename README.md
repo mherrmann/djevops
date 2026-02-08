@@ -83,7 +83,7 @@ Error emails require Django setting `DEBUG` to be `False`.
 </details>
 
 <details>
-<summary>Database backups</summary>
+<summary>Automatic database backups</summary>
 
 You can set up automatic database backups by adding a `backup` element to the
 `db` section in the djevops config file. For example:
@@ -108,6 +108,34 @@ can store backups in S3, Azure Blob Storage and many others. The keys you add to
 the `backup` element above get copied into a `replica` element in Litestream's
 config. For more information about the available options, please
 see [Litestream's documentation](https://litestream.io/reference/config/).
+</details>
+
+<details>
+<summary>Background tasks via Celery and Redis</summary>
+
+If your Django app uses the `celery` Python package, then you can add a Celery
+worker by adding the following item to the djevops config:
+
+```
+services:
+  web:
+    # as before
+  celery:
+    type: celery
+    env:
+      inherit: web
+```
+
+Many Django apps use Redis as Celery's backend. You can install Redis on the
+server with an empty `redis` block:
+
+```
+redis:
+```
+
+This setup lets you run Python functions asynchronously, or on a schedule (eg.
+"every five hours").
+
 </details>
 
 ## Development
