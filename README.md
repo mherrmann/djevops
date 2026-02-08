@@ -35,15 +35,8 @@ services:
         ALLOWED_HOSTS: your.website.com
       secret:
         - DJANGO_SECRET_KEY
-  celery:
-    type: celery
-    env:
-      inherit: web
-
 db:
   type: sqlite
-
-redis:
 
 mail:
   host: smtp.gmail.com
@@ -133,8 +126,8 @@ add an empty `redis` block:
 redis:
 ```
 
-This setup lets you run Python functions asynchronously, or on a schedule (eg.
-"every five hours"). The service of type `celery` also spawns the necessary
+This setup lets you run Python functions asynchronously and on a schedule such
+as "every five hours". The service of type `celery` also spawns the necessary
 `beat` scheduler.
 
 </details>
