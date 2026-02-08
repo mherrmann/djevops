@@ -158,8 +158,6 @@ as a separate user. This means that environment variables cannot leak from one
 service to another. djevops also makes sure that no unintended ports are open,
 such as for example port 25 when using Postfix for sending emails.
 </details>
-<details>
-<summary>Secure defaults</summary>
 
 <details>
 <summary>Automatic OS updates</summary>
