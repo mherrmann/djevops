@@ -21,6 +21,8 @@ ERROR_ALREADY_EXISTS = 9
 TERMINAL_COLOR_SUCCESS = 93
 TERMINAL_COLOR_ERROR = 91
 
+LITESTREAM_VERSION = '0.5.6'
+
 def main():
     config = get_deploy_config()
     secrets = get_secrets()
@@ -326,8 +328,9 @@ def main():
             if not which('litestream'):
                 log('Installing Litestream...')
                 deb_path, _ = urlretrieve(
-                    'https://github.com/benbjohnson/litestream/releases/'
-                    'download/v0.5.3/litestream-0.5.3-linux-x86_64.deb'
+                    f'https://github.com/benbjohnson/litestream/releases/'
+                    f'download/v{LITESTREAM_VERSION}/litestream-'
+                    f'{LITESTREAM_VERSION}-linux-x86_64.deb'
                 )
                 _run(['dpkg', '-i', deb_path])
                 remove(deb_path)
