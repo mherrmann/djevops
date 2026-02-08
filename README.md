@@ -71,15 +71,15 @@ server's IP address.
 <details>
 <summary>Error emails</summary>
 
-If you filled in the `mail` section in the config file, then you can configure
-Django to email you when errors occur on your server. To do so, just set the
-Django `ADMINS` setting. For example, in `settings.py`:
+If you filled in the `mail` section in the config file, then you can make Django
+email you when errors occur. To do so, set `ADMINS` in Django's `settings.py` as
+follows:
 
 ```
 ADMINS = [('Your Name', 'your@email.com)]
 ```
 
-This requires Django setting `DEBUG` to be `False`.
+Error emails require Django setting `DEBUG` to be `False`.
 </details>
 
 <details>
