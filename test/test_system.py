@@ -151,7 +151,7 @@ class OfflineTest(_DjevopsTest):
         )
         git('remote', 'add', 'origin', 'https://example.com/repo.git')
 
-        init()
+        init(silent=True)
 
     def test_deploy(self):
         self.test_init()
@@ -317,7 +317,7 @@ class OnlineTest(_DjevopsTest):
         git('commit', '-m', 'Initial commit')
         git('remote', 'add', 'origin', TEST_REPO_URL)
         git('push', '-u', 'origin', self.test_name)
-        init()
+        init(silent=True)
 
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['server'] = self.server_ip
