@@ -179,7 +179,8 @@ class OfflineTest(_DjevopsTest):
             '        type: django\n'
             '        env:\n'
             '          clear:\n'
-            f'            ALLOWED_HOSTS: "1.2.3.4"'
+            f'            ALLOWED_HOSTS: "1.2.3.4"\n\n'
+            "Don't forget to commit *and push* your changes to Git."
         )
 
         self.add_to_settings([
@@ -207,7 +208,8 @@ class OfflineTest(_DjevopsTest):
             'environment variable STATIC_ROOT. For example, in '
             f'{self.SETTINGS_PY_RELPATH}:\n\n'
             '    import os\n'
-            '    STATIC_ROOT = os.getenv("STATIC_ROOT")'
+            '    STATIC_ROOT = os.getenv("STATIC_ROOT")\n\n'
+            "Don't forget to commit *and push* your changes to Git."
         )
 
         self.add_to_settings(["STATIC_ROOT = os.getenv('STATIC_ROOT')"])
@@ -221,7 +223,8 @@ class OfflineTest(_DjevopsTest):
             "Please set DATABASES['default']['NAME'] in "
             f"{self.SETTINGS_PY_RELPATH} to the value of environment variable "
             "SQLITE_DB_FILE. A good expression is:\n"
-            "    os.getenv('SQLITE_DB_FILE') or <what you had before>"
+            "    os.getenv('SQLITE_DB_FILE') or <what you had before>\n\n"
+            "Don't forget to commit *and push* your changes to Git."
         )
 
         self.add_to_settings([

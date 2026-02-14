@@ -6,6 +6,8 @@ import sys
 
 SETTINGS_PY = settings.SETTINGS_MODULE.replace('.', '/') + '.py'
 
+GIT_HINT = "Don't forget to commit *and push* your changes to Git."
+
 def main(server_ip, has_db):
     check_allowed_hosts(server_ip)
     check_staticfiles()
@@ -57,5 +59,5 @@ def check_databases():
         )
 
 def error(message):
-    sys.stderr.write(message)
+    sys.stderr.write(message + '\n\n' + GIT_HINT)
     sys.exit(0)
