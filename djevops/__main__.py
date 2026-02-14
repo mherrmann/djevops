@@ -80,6 +80,9 @@ def init():
     makedirs('djevops', exist_ok=True)
     with open('djevops/deploy.yml', 'w') as f:
         f.write(yaml.dump(deploy_yml))
+    print('Created djevops/deploy.yml')
+    print('Created djevops/secrets.py')
+    print(f'To deploy your Django app to a server, run: djevops deploy')
 
 def deploy(verbose=False, dry_run=False):
     deploy_yml = 'djevops/deploy.yml'
