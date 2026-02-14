@@ -34,9 +34,9 @@ def check_allowed_hosts(server_ip):
             '    services:\n'
             '      web:\n'
             '        type: django\n'
-            '      env:\n'
-            '        clear:\n'
-            f'          ALLOWED_HOSTS: "{server_ip}"'
+            '        env:\n'
+            '          clear:\n'
+            f'            ALLOWED_HOSTS: "{server_ip}"'
         )
     for host in settings.ALLOWED_HOSTS:
         if not is_domain(host) and not is_ip(host):

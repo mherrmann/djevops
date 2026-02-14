@@ -175,9 +175,9 @@ class OfflineTest(_DjevopsTest):
             '    services:\n'
             '      web:\n'
             '        type: django\n'
-            '      env:\n'
-            '        clear:\n'
-            f'          ALLOWED_HOSTS: "1.2.3.4"'
+            '        env:\n'
+            '          clear:\n'
+            f'            ALLOWED_HOSTS: "1.2.3.4"'
         )
 
         self.add_to_settings([
