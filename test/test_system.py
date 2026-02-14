@@ -132,7 +132,8 @@ class OfflineTest(_DjevopsTest):
             'Please add `django` to your requirements.txt file.'
         )
         with open('requirements.txt', 'w') as f:
-            f.write('django==' + django.get_version())
+            # Uppercase D to mirror the output produced by `pip freeze`.
+            f.write('Django==' + django.get_version())
 
         self.expect_init_error(
             'Please add `gunicorn` to your requirements.txt file.'

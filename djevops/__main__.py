@@ -37,7 +37,9 @@ def init(silent=False):
     with open('requirements.txt') as f:
         requirements = f.read()
     for dep in ('django', 'gunicorn'):
-        if not re.search(rf'^{dep}\s*\b', requirements, re.MULTILINE):
+        if not re.search(
+            rf'^{dep}\s*\b', requirements, re.MULTILINE | re.IGNORECASE
+        ):
             raise CommandError(
                 f'Please add `{dep}` to your requirements.txt file.'
             )
