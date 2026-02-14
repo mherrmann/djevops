@@ -4,6 +4,8 @@ from djevops.util import is_domain, is_ip
 import os
 import sys
 
+SETTINGS_PY = settings.SETTINGS_MODULE.replace('.', '/') + '.py'
+
 def main(server_ip, has_db):
     check_allowed_hosts(server_ip)
     check_staticfiles()
@@ -17,7 +19,7 @@ def check_staticfiles():
             error(
                 'Please set Django setting STATIC_ROOT to the value of '
                 'environment variable STATIC_ROOT. For example, in '
-                'settings.py:\n\n'
+                f'{SETTINGS_PY}:\n\n'
                 '    import os\n'
                 '    STATIC_ROOT = os.getenv("STATIC_ROOT")'
             )
@@ -27,10 +29,10 @@ def check_allowed_hosts(server_ip):
         error(
             'Please set Django setting ALLOWED_HOSTS to the list of host names '
             'or IP addresses under which your server is accessible. For '
-            'example, in settings.py:\n\n'
+            f'example, in {SETTINGS_PY}:\n\n'
             '    import os\n'
             '    ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(" ")\n\n'
-            'And in deploy.yml:\n\n'
+            'And in djevops/deploy.yml:\n\n'
             '    services:\n'
             '      web:\n'
             '        type: django\n'
@@ -48,7 +50,7 @@ def check_allowed_hosts(server_ip):
 def check_databases():
     if settings.DATABASES['default']['NAME'] != os.environ['SQLITE_DB_FILE']:
         error(
-            "Please set DATABASES['default']['NAME'] in settings.py to the "
+            f"Please set DATABASES['default']['NAME'] in {SETTINGS_PY} to the "
             "value of environment variable SQLITE_DB_FILE. A good expression "
             "is:\n"
             "    os.getenv('SQLITE_DB_FILE') or <what you had before>"

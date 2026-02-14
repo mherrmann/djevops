@@ -70,6 +70,8 @@ class _DjevopsTest(_TestInTempDir):
     DJANGO_PROJECT_NAME = 'testproject'
     DJANGO_APP_NAME = 'testapp'
 
+    SETTINGS_PY_RELPATH = f'{DJANGO_PROJECT_NAME}/settings.py'
+
     def expect_init_error(self, message):
         with self._expect_command_error(message):
             init()
@@ -95,11 +97,10 @@ class _DjevopsTest(_TestInTempDir):
             f.write(yaml.dump(deploy_yml))
 
     def add_to_settings(self, lines, do_commit=True):
-        settings_py = f'{self.DJANGO_PROJECT_NAME}/settings.py'
-        with open(settings_py, 'a') as f:
+        with open(self.SETTINGS_PY_RELPATH, 'a') as f:
             f.write('\n' + '\n'.join(lines))
         if do_commit:
-            commit(settings_py, 'Add to settings.py')
+            commit(self.SETTINGS_PY_RELPATH, 'Add to settings.py')
 
     def add_to_secrets(self, dict_):
         with open('djevops/secrets.py', 'a') as f:
@@ -158,7 +159,8 @@ class OfflineTest(_DjevopsTest):
         self.test_init()
 
         self.expect_deploy_error(
-            "Please set your server's IP address in deploy.yml. For example:\n"
+            "Please set your server's IP address in djevops/deploy.yml. For "
+            "example:\n"
             "    server: 1.2.3.4"
         )
 
@@ -168,10 +170,10 @@ class OfflineTest(_DjevopsTest):
         self.expect_deploy_error(
             'Please set Django setting ALLOWED_HOSTS to the list of host '
             'names or IP addresses under which your server is accessible. '
-            'For example, in settings.py:\n\n'
+            f'For example, in {self.SETTINGS_PY_RELPATH}:\n\n'
             '    import os\n'
             '    ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(" ")\n\n'
-            'And in deploy.yml:\n\n'
+            f'And in djevops/deploy.yml:\n\n'
             '    services:\n'
             '      web:\n'
             '        type: django\n'
@@ -203,7 +205,7 @@ class OfflineTest(_DjevopsTest):
         self.expect_deploy_error(
             'Please set Django setting STATIC_ROOT to the value of '
             'environment variable STATIC_ROOT. For example, in '
-            'settings.py:\n\n'
+            f'{self.SETTINGS_PY_RELPATH}:\n\n'
             '    import os\n'
             '    STATIC_ROOT = os.getenv("STATIC_ROOT")'
         )
@@ -216,9 +218,9 @@ class OfflineTest(_DjevopsTest):
             deploy_yml['db'] = {'type': 'sqlite'}
 
         self.expect_deploy_error(
-            "Please set DATABASES['default']['NAME'] in settings.py to the "
-            "value of environment variable SQLITE_DB_FILE. A good expression "
-            "is:\n"
+            "Please set DATABASES['default']['NAME'] in "
+            f"{self.SETTINGS_PY_RELPATH} to the value of environment variable "
+            "SQLITE_DB_FILE. A good expression is:\n"
             "    os.getenv('SQLITE_DB_FILE') or <what you had before>"
         )
 

@@ -143,7 +143,8 @@ def check_config(deploy_config, secrets):
     server_ip = deploy_config.get('server')
     if not server_ip or server_ip == SAMPLE_SERVER_IP:
         raise CommandError(
-            "Please set your server's IP address in deploy.yml. For example:\n"
+            "Please set your server's IP address in djevops/deploy.yml. For "
+            "example:\n"
             "    server: 1.2.3.4"
         )
 
@@ -151,8 +152,8 @@ def check_config(deploy_config, secrets):
         django_service_name, django_service = get_django_service(deploy_config)
     except LookupError:
         raise CommandError(
-            'Please add at least one service of type `django` to deploy.yml. '
-            'For example:\n'
+            'Please add at least one service of type `django` to '
+            'djevops/deploy.yml. For example:\n'
             '    services:\n'
             '      web:\n'
             '        type: django'
