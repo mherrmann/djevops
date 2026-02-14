@@ -104,7 +104,7 @@ def init(silent=False):
     }
     makedirs('djevops', exist_ok=True)
     with open('djevops/deploy.yml', 'w') as f:
-        f.write(yaml.dump(deploy_yml))
+        f.write(yaml.dump(deploy_yml, sort_keys=False))
     with open('djevops/secrets.py', 'w') as f:
         f.write(SAMPLE_SECRETS_PY)
     if not silent:
