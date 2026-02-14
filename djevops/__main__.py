@@ -222,11 +222,12 @@ def main():
         print('Usage: djevops init|deploy [--verbose]')
         sys.exit(0)
     command = sys.argv[1]
-    verbose = len(sys.argv) == 3 and sys.argv[2] == '--verbose'
     try:
         if command == 'init':
-            init()
+            silent = len(sys.argv) == 3 and sys.argv[2] == '--silent'
+            init(silent)
         elif command == 'deploy':
+            verbose = len(sys.argv) == 3 and sys.argv[2] == '--verbose'
             deploy(verbose)
         else:
             raise CommandError(f'Unknown command: {command}')
