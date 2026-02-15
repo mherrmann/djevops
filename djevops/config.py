@@ -1,4 +1,4 @@
-SQLITE_DB_FILE = '/var/lib/django/db.sqlite3'
+SQLITE_DB_FILE = '/var/lib/djevops/db.sqlite3'
 
 DEFAULT_ENV = {
     'SQLITE_DB_FILE': SQLITE_DB_FILE,

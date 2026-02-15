@@ -102,12 +102,12 @@ def main():
     log('Creating Nginx includes directory...')
     makedirs('/etc/nginx/includes', exist_ok=True)
 
-    log('Creating /var/lib/django directory...')
+    log('Creating /var/lib/djevops directory...')
     django_group = 'django'
     ensure_group_exists(django_group)
-    makedirs('/var/lib/django', exist_ok=True)
-    _chown('/var/lib/django', group_name=django_group)
-    chmod('/var/lib/django', 0o770)
+    makedirs('/var/lib/djevops', exist_ok=True)
+    _chown('/var/lib/djevops', group_name=django_group)
+    chmod('/var/lib/djevops', 0o770)
 
     log('Configuring services...')
     primary_domain = ''
