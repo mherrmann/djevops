@@ -47,7 +47,7 @@ SECRETS_NAME_RE = r'^[A-Z][A-Z0-9_]+$'
 class CommandError(Exception):
     pass
 
-def init(silent=False):
+def init(quiet=False):
     if not exists('.git'):
         raise CommandError('This directory is not a Git repository.')
     remotes = git('remote').splitlines()
@@ -111,12 +111,12 @@ def init(silent=False):
         f.write(yaml.dump(deploy_yml, sort_keys=False))
     with open('djevops/secrets.py', 'w') as f:
         f.write(SAMPLE_SECRETS_PY)
-    if not silent:
+    if not quiet:
         print('Created djevops/deploy.yml')
         print('Created djevops/secrets.py')
         print(f'To deploy your Django app to a server, run: djevops deploy')
 
-def deploy(silent=False, dry_run=False):
+def deploy(quiet=False, dry_run=False):
     deploy_yml = 'djevops/deploy.yml'
     with open(deploy_yml) as f:
         deploy_config = yaml.safe_load(f)
@@ -128,7 +128,7 @@ def deploy(silent=False, dry_run=False):
         return
 
     server = deploy_config['server']
-    install_djevops_on_server('root', server, silent)
+    install_djevops_on_server('root', server, quiet)
     rsync('-a', deploy_yml, f'root@{server}:/root/deploy.yml')
 
     secrets_json = NamedTemporaryFile(mode='w', delete=False, suffix='.json')
@@ -140,7 +140,7 @@ def deploy(silent=False, dry_run=False):
         remove(secrets_json.name)
 
     run_with_djevops_venv(
-        'root', server, 'python -m djevops.remote.deploy', silent
+        'root', server, 'python -m djevops.remote.deploy', quiet
     )
 
 def check_config(deploy_config, secrets):
@@ -177,8 +177,8 @@ def check_config(deploy_config, secrets):
     if error_msg:
         raise CommandError(error_msg)
 
-def install_djevops_on_server(user, host, silent):
-    ssh_ = lambda cmd: ssh(user, host, cmd, silent)
+def install_djevops_on_server(user, host, quiet):
+    ssh_ = lambda cmd: ssh(user, host, cmd, quiet)
     ssh_(get_apt_install_cmd('rsync'))
     ssh_(
         'command -v uv >/dev/null 2>&1 || '
@@ -207,17 +207,17 @@ def get_secrets(path):
         k: v for k, v in run_path(path).items() if re.match(SECRETS_NAME_RE, k)
     }
 
-def run_with_djevops_venv(user, host, cmd, silent):
-    ssh(user, host, f'/opt/djevops/.venv/bin/{cmd}', silent)
+def run_with_djevops_venv(user, host, cmd, quiet):
+    ssh(user, host, f'/opt/djevops/.venv/bin/{cmd}', quiet)
 
 def rsync(*args):
     ssh_cmd = get_ssh_command()
     extra_rsync_args = [] if ssh_cmd == 'ssh' else ['-e', ssh_cmd]
     run_silently(['rsync', *extra_rsync_args, *args])
 
-def ssh(user, host, cmd, silent):
+def ssh(user, host, cmd, quiet):
     ssh_cmd = get_ssh_command()
-    run_ = run_silently if silent else partial(run, check=True)
+    run_ = run_silently if quiet else partial(run, check=True)
     run_(f'{ssh_cmd} {user}@{host} {quote(cmd)}', shell=True)
 
 def get_ssh_command():
@@ -228,15 +228,15 @@ def get_ssh_command():
 
 def main():
     if len(sys.argv) < 2 or len(sys.argv) > 3:
-        print('Usage: djevops init|deploy [--silent]')
+        print('Usage: djevops init|deploy [--quiet]')
         sys.exit(0)
     command = sys.argv[1]
-    silent = len(sys.argv) == 3 and sys.argv[2] == '--silent'
+    quiet = len(sys.argv) == 3 and sys.argv[2] == '--quiet'
     try:
         if command == 'init':
-            init(silent)
+            init(quiet)
         elif command == 'deploy':
-            deploy(silent)
+            deploy(quiet)
         else:
             raise CommandError(f'Unknown command: {command}')
     except CommandError as e:
