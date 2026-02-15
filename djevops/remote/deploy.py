@@ -40,8 +40,13 @@ def main():
     else:
         git_repo_url = f'https://{git_server}/{git_repo_name}.git'
 
-    log('Installing git...')
-    install('git-core')
+    def install_if_not_installed(*packages):
+        to_install = [p for p in packages if not is_installed(p)]
+        if to_install:
+            log(f"Installing {', '.join(to_install)}...")
+            _run(get_apt_install_cmd(*to_install))
+
+    install_if_not_installed('git')
 
     if git_repo_key and not exists('/root/.ssh/id_rsa'):
         log('Setting up SSH keys for cloning the Git repository...')
@@ -79,11 +84,9 @@ def main():
     log('Setting up .bash_profile for root...')
     symlink_force('/opt/djevops/conf/.bash_profile', '/root/.bash_profile')
 
-    log('Installing Supervisor...')
-    install('supervisor')
+    install_if_not_installed('supervisor')
 
-    log('Installing OS dependencies for our Python environment...')
-    install('python3-venv')
+    install_if_not_installed('python3-venv')
 
     if not exists('/srv/venv'):
         log('Creating virtual environment...')
@@ -94,8 +97,7 @@ def main():
     log('Installing Python dependencies...')
     install_python_deps()
 
-    log('Installing Nginx...')
-    install('nginx')
+    install_if_not_installed('nginx')
 
     log('Creating Nginx includes directory...')
     makedirs('/etc/nginx/includes', exist_ok=True)
@@ -219,8 +221,7 @@ def main():
     )
 
     if service_domains:
-        log('Configuring SSL certificates...')
-        install('certbot python3-certbot-nginx')
+        install_if_not_installed('certbot', 'python3-certbot-nginx')
         register_args = ['certbot', 'register', '--quiet', '--agree-tos']
         if admin_email:
             register_args.extend(['--email', admin_email])
@@ -256,7 +257,7 @@ def main():
         debconf_set_selections(
             'iptables-persistent iptables-persistent/autosave_v6 boolean true'
         )
-        install('iptables-persistent')
+        install_if_not_installed('iptables-persistent')
 
         log('Configuring iptables...')
         _run('iptables -A INPUT -i lo -p tcp --dport 25 -j ACCEPT')
@@ -271,7 +272,10 @@ def main():
         debconf_set_selections(
             "postfix postfix/main_mailer_type string 'Internet Site'"
         )
-        install('postfix mailutils libsasl2-2 ca-certificates libsasl2-modules')
+        install_if_not_installed(
+            'postfix mailutils', 'libsasl2-2', 'ca-certificates',
+            'libsasl2-modules'
+        )
 
         log('Configuring Postfix...')
         hostname = primary_domain or _run('hostname')
@@ -315,8 +319,7 @@ def main():
         _run('/etc/init.d/postfix reload')
 
     if 'redis' in config:
-        log('Installing Redis...')
-        install('redis-server')
+        install_if_not_installed('redis-server')
 
     db = config.get('db')
     if db:
@@ -421,16 +424,20 @@ def main():
     _run('crontab crontab')
     remove('crontab')
 
-    log('Setting up automatic updates...')
-    install('unattended-upgrades')
+    install_if_not_installed('unattended-upgrades')
     with open('/etc/apt/apt.conf.d/20auto-upgrades', 'w') as f:
         f.write('APT::Periodic::Update-Package-Lists "1";\n')
         f.write('APT::Periodic::Unattended-Upgrade "1";\n')
 
     log('Done.')
 
-def install(packages):
-    _run(get_apt_install_cmd(packages))
+def is_installed(package):
+    cp = run(['dpkg', '-s', package], stdout=PIPE, stderr=STDOUT, text=True)
+    if cp.returncode == 0:
+        return True
+    elif cp.returncode == 1 and 'is not installed' in cp.stdout:
+        return False
+    raise CalledProcessError(cp.returncode, cp.cmd, cp.stdout)
 
 def ensure_group_exists(group_name):
     _run(
