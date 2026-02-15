@@ -140,7 +140,7 @@ def deploy(quiet=False, dry_run=False):
         remove(secrets_json.name)
 
     run_with_djevops_venv(
-        'root', server, 'python -m djevops.remote.deploy', quiet
+        'root', server, 'python -u -m djevops.remote.deploy', quiet
     )
 
 def check_config(deploy_config, secrets):
