@@ -196,7 +196,7 @@ def install_djevops_on_server(user, host, silent):
         'ln -sf /opt/djevops/pyproject.toml /opt/pyproject.toml && '
         'ln -sf /opt/djevops/uv.lock /opt/uv.lock && '
         'cd /opt && '
-        'UV_PROJECT_ENVIRONMENT=/opt/djevops/.venv ~/.local/bin/uv sync && '
+        'UV_PROJECT_ENVIRONMENT=/opt/djevops/.venv ~/.local/bin/uv sync -q && '
         'rm /opt/pyproject.toml /opt/uv.lock'
     )
 
