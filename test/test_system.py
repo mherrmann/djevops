@@ -53,19 +53,8 @@ QUIET = True
 
 GUNICORN_VERSION = '24.1.1'
 
-class _TestInTempDir(TestCase):
 
-    def setUp(self):
-        self.temp_dir = TemporaryDirectory()
-        self.cwd_before = os.getcwd()
-        chdir(self.temp_dir.name)
-
-    def tearDown(self):
-        chdir(self.cwd_before)
-        self.temp_dir.cleanup()
-
-
-class _DjevopsTest(_TestInTempDir):
+class _DjevopsTest(TestCase):
 
     DJANGO_PROJECT_NAME = 'testproject'
     DJANGO_APP_NAME = 'testapp'
@@ -80,27 +69,33 @@ class _DjevopsTest(_TestInTempDir):
         with self._expect_command_error(message):
             deploy(QUIET)
 
-    def start_django_project(self):
+    @classmethod
+    def start_django_project(cls):
         run_silently([
-            'django-admin', 'startproject', self.DJANGO_PROJECT_NAME, '.'
+            'django-admin', 'startproject', cls.DJANGO_PROJECT_NAME, '.'
         ])
 
-    def start_django_app(self):
-        run_silently(['python', 'manage.py', 'startapp', self.DJANGO_APP_NAME])
+    @classmethod
+    def start_django_app(cls):
+        run_silently([
+            'python', 'manage.py', 'startapp', cls.DJANGO_APP_NAME
+        ])
 
+    @classmethod
     @contextmanager
-    def update_deploy_yml(self):
+    def update_deploy_yml(cls):
         with open('djevops/deploy.yml') as f:
             deploy_yml = yaml.safe_load(f)
         yield deploy_yml
         with open('djevops/deploy.yml', 'w') as f:
             f.write(yaml.dump(deploy_yml))
 
-    def add_to_settings(self, lines, do_commit=True):
-        with open(self.SETTINGS_PY_RELPATH, 'a') as f:
+    @classmethod
+    def add_to_settings(cls, lines, do_commit=True):
+        with open(cls.SETTINGS_PY_RELPATH, 'a') as f:
             f.write('\n' + '\n'.join(lines))
         if do_commit:
-            commit(self.SETTINGS_PY_RELPATH, 'Add to settings.py')
+            commit(cls.SETTINGS_PY_RELPATH, 'Add to settings.py')
 
     def add_to_secrets(self, dict_):
         with open('djevops/secrets.py', 'a') as f:
@@ -115,6 +110,14 @@ class _DjevopsTest(_TestInTempDir):
 
 
 class OfflineTest(_DjevopsTest):
+
+    def setUp(self):
+        super().setUp()
+        self.restore_cwd_fn = cd_to_temp_dir()
+
+    def tearDown(self):
+        self.restore_cwd_fn()
+        super().tearDown()
 
     def test_init(self):
         self.expect_init_error('This directory is not a Git repository.')
@@ -256,93 +259,105 @@ class OnlineTest(_DjevopsTest):
 
     @classmethod
     def setUpClass(cls):
-        ssh_key_content = cls.SSH_PUBLIC_KEY.read_text().strip()
-        cls.ssh_key = ensure_hetzner_ssh_key_exists(
-            HETZNER_API_TOKEN, ssh_key_content, f'djevops-test-{int(time())}'
-        )
-    
-    @classmethod
-    def tearDownClass(cls):
+        cls.test_name = f'djevopstest{int(time())}'
+        cls.cleanup_actions = []
         try:
-            cls.ssh_key.delete()
-        except Exception as e:
-            print(f'Warning: Failed to delete SSH key: {e}')
+            ssh_key_content = cls.SSH_PUBLIC_KEY.read_text().strip()
+            cls.ssh_key = ensure_hetzner_ssh_key_exists(
+                HETZNER_API_TOKEN, ssh_key_content, cls.test_name
+            )
+            cls.cleanup_actions.append(cls.ssh_key.delete)
 
-    def setUp(self):
-        super().setUp()
+            with NamedTemporaryFile(delete=False) as known_hosts_file:
+                cls.known_hosts_file = known_hosts_file.name
+            cls.cleanup_actions.append(lambda: remove(cls.known_hosts_file))
 
-        self.test_name = f'djevopstest{int(time())}'
-
-        with NamedTemporaryFile(delete=False) as known_hosts_file:
-            self.known_hosts_file = known_hosts_file.name
-
-        self.server = create_hetzner_server(
-            HETZNER_API_TOKEN, self.ssh_key, self.test_name
-        )
-        try:
-            self.server_ip = self.server.public_net.ipv4.ip
+            cls.server = create_hetzner_server(
+                HETZNER_API_TOKEN, cls.ssh_key, cls.test_name
+            )
+            cls.cleanup_actions.append(cls.server.delete)
+            cls.server_ip = cls.server.public_net.ipv4.ip
             wait_for_server_to_be_ready(
-                'root', self.server_ip, self.SSH_PRIVATE_KEY,
-                self.known_hosts_file
+                'root', cls.server_ip, cls.SSH_PRIVATE_KEY, cls.known_hosts_file
             )
 
-            self.dns_record = DNSimpleARecord.create(
+            cls.dns_record = DNSimpleARecord.create(
                 DNSIMPLE_API_TOKEN, DNSIMPLE_ACCOUNT_ID, DNSIMPLE_TEST_DOMAIN,
-                self.test_name, self.server_ip
+                cls.test_name, cls.server_ip
             )
-            try:
-                self.ssh_command = \
-                    f'ssh -i {self.SSH_PRIVATE_KEY} ' \
-                    f'-o UserKnownHostsFile={self.known_hosts_file}'
-                self.users_with_ssh_access = ['root']
-                os.environ['DJEVOPS_SSH_COMMAND'] = self.ssh_command
+            cls.cleanup_actions.append(cls.dns_record.delete)
 
-                self.server_hostname = \
-                    f'{self.test_name}.{DNSIMPLE_TEST_DOMAIN}'
-                # In case they're left over from a previous test run:
-                self._delete_db_backups_from_s3()
-                self.init_test_app()
-            except:
-                self._delete_dns_record()
-                raise
+            cls.ssh_command = \
+                f'ssh -i {cls.SSH_PRIVATE_KEY} ' \
+                f'-o UserKnownHostsFile={cls.known_hosts_file}'
+            cls.users_with_ssh_access = ['root']
+            os.environ['DJEVOPS_SSH_COMMAND'] = cls.ssh_command
+            cls.cleanup_actions.append(
+                lambda: os.environ.pop('DJEVOPS_SSH_COMMAND')
+            )
+
+            cls.server_hostname = f'{cls.test_name}.{DNSIMPLE_TEST_DOMAIN}'
+            # In case they're left over from a previous test run:
+            cls._delete_db_backups_from_s3()
+            cls.cleanup_actions.append(cls._delete_db_backups_from_s3)
+            cls.cleanup_actions.append(
+                lambda: cls._delete_remote_branch_if_exists(cls.test_name)
+            )
+            restore_cwd = cd_to_temp_dir()
+            cls.cleanup_actions.append(restore_cwd)
+            cls.init_test_app()
         except:
-            self._delete_server()
+            cls.tearDownClass()
             raise
 
-    def tearDown(self):
-        self._delete_remote_branch_if_exists(self.test_name)
-        os.environ.pop('DJEVOPS_SSH_COMMAND')
-        self._delete_server()
-        self._delete_dns_record()
-        self._delete_db_backups_from_s3()
-        remove(self.known_hosts_file)
-        super().tearDown()
+    @classmethod
+    def tearDownClass(cls):
+        for action in reversed(cls.cleanup_actions):
+            try:
+                action()
+            except Exception as e:
+                print(f'Warning: Cleanup action {action.__name__} failed: {e}')
 
-    def init_test_app(self):
-        self.start_django_project()
-        self.start_django_app()
+    @classmethod
+    def init_test_app(cls):
+        cls.start_django_project()
+        cls.start_django_app()
         with open('requirements.txt', 'w') as f:
             f.write(f'django=={django.get_version()}\n')
             f.write(f'gunicorn=={GUNICORN_VERSION}')
-        self.add_to_settings([
+        cls.add_to_settings([
             "import os",
             "ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(' ')",
-            f"INSTALLED_APPS += [{self.DJANGO_APP_NAME!r}]"
+            f"INSTALLED_APPS += [{cls.DJANGO_APP_NAME!r}]"
         ], do_commit=False)
-        git('init', '-q', '-b', self.test_name)
+        git('init', '-q', '-b', cls.test_name)
         git('add', '.')
         git('commit', '-m', 'Initial commit')
         git('remote', 'add', 'origin', TEST_REPO_URL)
-        git('push', '-u', 'origin', self.test_name)
+        git('push', '-u', 'origin', cls.test_name)
         init(quiet=True)
 
-        with self.update_deploy_yml() as deploy_yml:
-            deploy_yml['server'] = self.server_ip
+        with cls.update_deploy_yml() as deploy_yml:
+            deploy_yml['server'] = cls.server_ip
             deploy_yml['services']['web']['env'] = {
                 'clear': {
-                    'ALLOWED_HOSTS': self.server_ip
+                    'ALLOWED_HOSTS': cls.server_ip
                 }
             }
+
+    @classmethod
+    def _delete_remote_branch_if_exists(cls, name):
+        try:
+            git('push', 'origin', '--delete', name)
+        except CalledProcessError:
+            pass
+
+    @classmethod
+    def _delete_db_backups_from_s3(cls):
+        delete_directory_from_s3(
+            S3_REGION, S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET,
+            S3_DB_BACKUP_DIR
+        )
 
     def test_all(self):
         self._test_http()
@@ -562,30 +577,6 @@ class OnlineTest(_DjevopsTest):
         output = self._execute_remote_django_shell(run_task_script, 'web')
         self.assertIn('celery works', output)
 
-    def _delete_dns_record(self):
-        try:
-            self.dns_record.delete()
-        except Exception as e:
-            print(f'Warning: Failed to delete DNS record {self.dns_record}: {e}')
-
-    def _delete_server(self):
-        try:
-            self.server.delete()
-        except Exception as e:
-            print(f'Warning: Failed to delete server {self.server}: {e}')
-
-    def _delete_db_backups_from_s3(self):
-        delete_directory_from_s3(
-            S3_REGION, S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET,
-            S3_DB_BACKUP_DIR
-        )
-
-    def _delete_remote_branch_if_exists(self, name):
-        try:
-            git('push', 'origin', '--delete', name)
-        except CalledProcessError:
-            pass
-
     def _execute_remote_sql(self, sql, user):
         django_cmd = [
             "from django.db import connection",
@@ -616,6 +607,7 @@ class OnlineTest(_DjevopsTest):
             f"chmod 600 .ssh/authorized_keys"
         )
         self._ssh(f'su -c {quote(cmd_as_user)} - {user}')
+
 
 def ensure_hetzner_ssh_key_exists(api_token, ssh_key_content, name):
     hetzner = HetznerClient(token=api_token)
@@ -724,3 +716,12 @@ def delete_directory_from_s3(
     for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
         objects = [{'Key': obj['Key']} for obj in page.get('Contents', [])]
         s3.delete_objects(Bucket=bucket, Delete={'Objects': objects})
+
+def cd_to_temp_dir():
+    cwd_before = os.getcwd()
+    temp_dir = TemporaryDirectory()
+    chdir(temp_dir.name)
+    def cleanup():
+        chdir(cwd_before)
+        temp_dir.cleanup()
+    return cleanup
