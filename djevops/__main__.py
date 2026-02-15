@@ -116,7 +116,7 @@ def init(silent=False):
         print('Created djevops/secrets.py')
         print(f'To deploy your Django app to a server, run: djevops deploy')
 
-def deploy(verbose=False, dry_run=False):
+def deploy(silent=False, dry_run=False):
     deploy_yml = 'djevops/deploy.yml'
     with open(deploy_yml) as f:
         deploy_config = yaml.safe_load(f)
@@ -128,7 +128,7 @@ def deploy(verbose=False, dry_run=False):
         return
 
     server = deploy_config['server']
-    install_djevops_on_server('root', server, verbose)
+    install_djevops_on_server('root', server, silent)
     rsync('-a', deploy_yml, f'root@{server}:/root/deploy.yml')
 
     secrets_json = NamedTemporaryFile(mode='w', delete=False, suffix='.json')
@@ -140,7 +140,7 @@ def deploy(verbose=False, dry_run=False):
         remove(secrets_json.name)
 
     run_with_djevops_venv(
-        'root', server, 'python -m djevops.remote.deploy', verbose
+        'root', server, 'python -m djevops.remote.deploy', silent
     )
 
 def check_config(deploy_config, secrets):
@@ -177,8 +177,8 @@ def check_config(deploy_config, secrets):
     if error_msg:
         raise CommandError(error_msg)
 
-def install_djevops_on_server(user, host, verbose):
-    ssh_ = lambda cmd: ssh(user, host, cmd, verbose)
+def install_djevops_on_server(user, host, silent):
+    ssh_ = lambda cmd: ssh(user, host, cmd, silent)
     ssh_(get_apt_install_cmd('rsync'))
     ssh_(
         'command -v uv >/dev/null 2>&1 || '
@@ -209,17 +209,17 @@ def get_secrets(path):
         k: v for k, v in run_path(path).items() if re.match(SECRETS_NAME_RE, k)
     }
 
-def run_with_djevops_venv(user, host, cmd, verbose):
-    ssh(user, host, f'/opt/djevops/.venv/bin/{cmd}', verbose)
+def run_with_djevops_venv(user, host, cmd, silent):
+    ssh(user, host, f'/opt/djevops/.venv/bin/{cmd}', silent)
 
 def rsync(*args):
     ssh_cmd = get_ssh_command()
     extra_rsync_args = [] if ssh_cmd == 'ssh' else ['-e', ssh_cmd]
     run_silently(['rsync', *extra_rsync_args, *args])
 
-def ssh(user, host, cmd, verbose):
+def ssh(user, host, cmd, silent):
     ssh_cmd = get_ssh_command()
-    run_ = partial(run, check=True) if verbose else run_silently
+    run_ = run_silently if silent else partial(run, check=True)
     run_(f'{ssh_cmd} {user}@{host} {quote(cmd)}', shell=True)
 
 def get_ssh_command():
@@ -230,16 +230,15 @@ def get_ssh_command():
 
 def main():
     if len(sys.argv) < 2 or len(sys.argv) > 3:
-        print('Usage: djevops init|deploy [--verbose]')
+        print('Usage: djevops init|deploy [--silent]')
         sys.exit(0)
     command = sys.argv[1]
+    silent = len(sys.argv) == 3 and sys.argv[2] == '--silent'
     try:
         if command == 'init':
-            silent = len(sys.argv) == 3 and sys.argv[2] == '--silent'
             init(silent)
         elif command == 'deploy':
-            verbose = len(sys.argv) == 3 and sys.argv[2] == '--verbose'
-            deploy(verbose)
+            deploy(silent)
         else:
             raise CommandError(f'Unknown command: {command}')
     except CommandError as e:

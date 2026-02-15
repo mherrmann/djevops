@@ -49,7 +49,7 @@ IMAP_HOST = os.environ['IMAP_HOST']
 EMAIL_USER = os.environ['EMAIL_USER']
 EMAIL_PASSWORD = os.environ['EMAIL_PASSWORD']
 
-VERBOSE = False
+SILENT = True
 
 GUNICORN_VERSION = '24.1.1'
 
@@ -78,7 +78,7 @@ class _DjevopsTest(_TestInTempDir):
 
     def expect_deploy_error(self, message):
         with self._expect_command_error(message):
-            deploy(VERBOSE)
+            deploy(SILENT)
 
     def start_django_project(self):
         run_silently([
@@ -203,7 +203,7 @@ class OfflineTest(_DjevopsTest):
                 'clear': {'ALLOWED_HOSTS': '1.2.3.4'}
             }
 
-        expect_deploy_to_succeed = lambda: deploy(VERBOSE, dry_run=True)
+        expect_deploy_to_succeed = lambda: deploy(SILENT, dry_run=True)
         expect_deploy_to_succeed()
 
         with self.update_deploy_yml() as deploy_yml:
@@ -353,7 +353,7 @@ class OnlineTest(_DjevopsTest):
         self._test_celery()
 
     def _test_http(self):
-        deploy(VERBOSE)
+        deploy(SILENT)
         response = requests.get(f'http://{self.server_ip}')
         self.assertEqual(response.status_code, 200)
         self.assertIn('The install worked', response.text)
@@ -365,7 +365,7 @@ class OnlineTest(_DjevopsTest):
                     'ALLOWED_HOSTS': self.server_hostname
                 }
             }
-        deploy(VERBOSE)
+        deploy(SILENT)
         response = requests.get(f'https://{self.server_hostname}')
         self.assertEqual(response.status_code, 200)
         self.assertIn('The install worked', response.text)
@@ -389,7 +389,7 @@ class OnlineTest(_DjevopsTest):
         table = self.test_name
         self._upload_mock_db_backup_to_s3(f"CREATE TABLE {table}(id)")
 
-        deploy(VERBOSE)
+        deploy(SILENT)
 
         count_rows = f"SELECT COUNT(*) FROM {table}"
         # The following line tests that the backup was restored. (If it weren't,
@@ -469,7 +469,7 @@ class OnlineTest(_DjevopsTest):
         })
 
         git('push')
-        deploy(VERBOSE)
+        deploy(SILENT)
 
         send_mail_script = [
             "from django.core.mail import send_mail",
@@ -499,7 +499,7 @@ class OnlineTest(_DjevopsTest):
         commit(test_txt, 'Add static file')
 
         git('push')
-        deploy(VERBOSE)
+        deploy(SILENT)
 
         response = requests.get(
             f'https://{self.server_hostname}/{test_txt_relpath}'
@@ -552,7 +552,7 @@ class OnlineTest(_DjevopsTest):
         commit(tasks_py, 'Add celery task')
 
         git('push')
-        deploy(VERBOSE)
+        deploy(SILENT)
 
         run_task_script = [
             f'from {self.DJANGO_APP_NAME}.tasks import test_task',
