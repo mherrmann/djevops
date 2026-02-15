@@ -86,13 +86,9 @@ def main():
 
     install_if_not_installed('supervisor')
 
-    install_if_not_installed('python3-venv')
-
     if not exists('/srv/venv'):
         log('Creating virtual environment...')
-        # Need to use an absolute path to python3 because this process runs in a
-        # virtual environment produced by `uv`, which only root has access to.
-        _run('/usr/bin/python3 -m venv /srv/venv')
+        _run('/root/.local/bin/uv venv /srv/venv')
 
     log('Installing Python dependencies...')
     install_python_deps()

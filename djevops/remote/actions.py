@@ -7,9 +7,10 @@ import json
 MANAGE_SH = '/opt/djevops/bin/manage.sh'
 
 def install_python_deps():
-    pip = lambda *args: run_silently(['/srv/venv/bin/pip', *args])
-    pip('install', '-U', 'pip')
-    pip('install', '-r', '/srv/app/requirements.txt')
+    run_silently([
+        '/root/.local/bin/uv', 'pip', 'install', '--python', '/srv/venv',
+        '-r', '/srv/app/requirements.txt'
+    ])
 
 def migrate_db():
     _run_manage_sh('migrate')
