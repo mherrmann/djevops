@@ -341,12 +341,15 @@ def main():
             if not exists(SQLITE_DB_FILE):
                 log('Restoring database backup...')
                 _run(['litestream', 'restore', SQLITE_DB_FILE])
-            _run('systemctl enable litestream')
-            _run('systemctl start litestream')
         log('Migrating database...')
         migrate_db()
         _chown(SQLITE_DB_FILE, group_name=django_group)
         chmod(SQLITE_DB_FILE, 0o660)
+        if backup:
+            # Do this after migrating the database and chowning the file in
+            # order to avoid race conditions.
+            _run('systemctl enable litestream')
+            _run('systemctl start litestream')
 
     log('Creating directories for static files...')
     makedirs('/srv/static', exist_ok=True)
