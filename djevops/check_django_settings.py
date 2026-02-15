@@ -1,12 +1,11 @@
 from django.conf import settings
+from djevops import GIT_HINT
 from djevops.util import is_domain, is_ip
 
 import os
 import sys
 
 SETTINGS_PY = settings.SETTINGS_MODULE.replace('.', '/') + '.py'
-
-GIT_HINT = "Don't forget to commit *and push* your changes to Git."
 
 def main(server_ip, has_db):
     check_allowed_hosts(server_ip)

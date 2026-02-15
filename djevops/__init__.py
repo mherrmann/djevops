@@ -1,0 +1,1 @@
+GIT_HINT = "Don't forget to commit *and push* your changes to Git."

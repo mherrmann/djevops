@@ -1,3 +1,4 @@
+from djevops import GIT_HINT
 from djevops.config import get_services_users_envs, get_django_service
 from djevops.util import git, get_apt_install_cmd, run_in_django_shell, \
     run_silently
@@ -47,25 +48,6 @@ class CommandError(Exception):
     pass
 
 def init(silent=False):
-    if not exists('manage.py'):
-        raise CommandError(
-            'There is no manage.py file in the current directory. Do you '
-            'already have a Django project?'
-        )
-    if not exists('requirements.txt'):
-        raise CommandError(
-            'Please create a requirements.txt file. For example, by running:\n'
-            '    pip freeze > requirements.txt'
-        )
-    with open('requirements.txt') as f:
-        requirements = f.read()
-    for dep in ('django', 'gunicorn'):
-        if not re.search(
-            rf'^{dep}\s*\b', requirements, re.MULTILINE | re.IGNORECASE
-        ):
-            raise CommandError(
-                f'Please add `{dep}` to your requirements.txt file.'
-            )
     if not exists('.git'):
         raise CommandError('This directory is not a Git repository.')
     remotes = git('remote').splitlines()
@@ -74,6 +56,25 @@ def init(silent=False):
             "This Git repository has no remotes. If you add one, don't forget "
             "to run `git push` after."
         )
+    if not exists('manage.py'):
+        raise CommandError(
+            "There is no manage.py file in the current directory. If you add "
+            "one, don't forget to commit *and push* your changes to Git."
+        )
+    if not exists('requirements.txt'):
+        raise CommandError(
+            'Please create a requirements.txt file. For example, by running:\n'
+            '    pip freeze > requirements.txt\n' + GIT_HINT
+        )
+    with open('requirements.txt') as f:
+        requirements = f.read()
+    for dep in ('django', 'gunicorn'):
+        if not re.search(
+            rf'^{dep}\s*\b', requirements, re.MULTILINE | re.IGNORECASE
+        ):
+            raise CommandError(
+                f'Please add `{dep}` to your requirements.txt file. ' + GIT_HINT
+            )
     remote = remotes[0]
     remote_url = git('remote', 'get-url', remote)
     if remote_url.startswith('https://'):

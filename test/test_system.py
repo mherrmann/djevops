@@ -117,41 +117,46 @@ class _DjevopsTest(_TestInTempDir):
 class OfflineTest(_DjevopsTest):
 
     def test_init(self):
-        self.expect_init_error(
-            'There is no manage.py file in the current directory. Do you '
-            'already have a Django project?'
-        )
-        self.start_django_project()
-
-        self.expect_init_error(
-            'Please create a requirements.txt file. For example, by running:\n'
-            '    pip freeze > requirements.txt'
-        )
-        open('requirements.txt', 'w').close()
-
-        self.expect_init_error(
-            'Please add `django` to your requirements.txt file.'
-        )
-        with open('requirements.txt', 'w') as f:
-            # Uppercase D to mirror the output produced by `pip freeze`.
-            f.write('Django==' + django.get_version())
-
-        self.expect_init_error(
-            'Please add `gunicorn` to your requirements.txt file.'
-        )
-        with open('requirements.txt', 'a') as f:
-            f.write(f'\ngunicorn=={GUNICORN_VERSION}')
-
         self.expect_init_error('This directory is not a Git repository.')
         git('init', '-q')
-        git('add', '.')
-        git('commit', '-m', 'Initial commit')
 
         self.expect_init_error(
             "This Git repository has no remotes. If you add one, don't forget "
             "to run `git push` after."
         )
         git('remote', 'add', 'origin', 'https://example.com/repo.git')
+
+        self.expect_init_error(
+            "There is no manage.py file in the current directory. If you add "
+            "one, don't forget to commit *and push* your changes to Git."
+        )
+        self.start_django_project()
+
+        self.expect_init_error(
+            'Please create a requirements.txt file. For example, by '
+            "running:\n"
+            "    pip freeze > requirements.txt\n"
+            "Don't forget to commit *and push* your changes to Git."
+        )
+        open('requirements.txt', 'w').close()
+
+        self.expect_init_error(
+            "Please add `django` to your requirements.txt file. Don't forget "
+            "to commit *and push* your changes to Git."
+        )
+        with open('requirements.txt', 'w') as f:
+            # Uppercase D to mirror the output produced by `pip freeze`.
+            f.write('Django==' + django.get_version())
+
+        self.expect_init_error(
+            "Please add `gunicorn` to your requirements.txt file. Don't forget "
+            "to commit *and push* your changes to Git."
+        )
+        with open('requirements.txt', 'a') as f:
+            f.write(f'\ngunicorn=={GUNICORN_VERSION}')
+
+        git('add', '.')
+        git('commit', '-m', 'Initial commit')
 
         init(silent=True)
 
