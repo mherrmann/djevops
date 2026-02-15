@@ -269,7 +269,7 @@ def main():
             "postfix postfix/main_mailer_type string 'Internet Site'"
         )
         install_if_not_installed(
-            'postfix mailutils', 'libsasl2-2', 'ca-certificates',
+            'postfix', 'mailutils', 'libsasl2-2', 'ca-certificates',
             'libsasl2-modules'
         )
 
@@ -433,7 +433,7 @@ def is_installed(package):
         return True
     elif cp.returncode == 1 and 'is not installed' in cp.stdout:
         return False
-    raise CalledProcessError(cp.returncode, cp.cmd, cp.stdout)
+    raise CalledProcessError(cp.returncode, cp.args, cp.stdout)
 
 def ensure_group_exists(group_name):
     _run(
