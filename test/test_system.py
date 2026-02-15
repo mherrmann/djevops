@@ -327,6 +327,7 @@ class OnlineTest(_DjevopsTest):
             f.write(f'gunicorn=={GUNICORN_VERSION}')
         cls.add_to_settings([
             "import os",
+            "DEBUG = os.getenv('DEBUG') == 'True'",
             "ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(' ')",
             f"INSTALLED_APPS += [{cls.DJANGO_APP_NAME!r}]"
         ], do_commit=False)
@@ -341,7 +342,8 @@ class OnlineTest(_DjevopsTest):
             deploy_yml['server'] = cls.server_ip
             deploy_yml['services']['web']['env'] = {
                 'clear': {
-                    'ALLOWED_HOSTS': cls.server_ip
+                    'ALLOWED_HOSTS': cls.server_ip,
+                    'DEBUG': 'True'
                 }
             }
 
@@ -359,33 +361,28 @@ class OnlineTest(_DjevopsTest):
             S3_DB_BACKUP_DIR
         )
 
-    def test_all(self):
-        self._test_http()
-        self._test_ssl()
-        self._test_db()
-        self._test_email()
-        self._test_static_files()
-        self._test_celery()
+    def tearDown(self):
+        super().tearDown()
+        # Some tests may set DEBUG to False. Reset it to True.
+        with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['services']['web']['env']['clear']['DEBUG'] = 'True'
 
-    def _test_http(self):
+    def test_http(self):
         deploy(QUIET)
         response = requests.get(f'http://{self.server_ip}')
         self.assertEqual(response.status_code, 200)
         self.assertIn('The install worked', response.text)
 
-    def _test_ssl(self):
+    def test_ssl(self):
         with self.update_deploy_yml() as deploy_yml:
-            deploy_yml['services']['web']['env'] = {
-                'clear': {
-                    'ALLOWED_HOSTS': self.server_hostname
-                }
-            }
+            deploy_yml['services']['web']['env']['clear']['ALLOWED_HOSTS'] += \
+                f' {self.server_hostname}'
         deploy(QUIET)
         response = requests.get(f'https://{self.server_hostname}')
         self.assertEqual(response.status_code, 200)
         self.assertIn('The install worked', response.text)
 
-    def _test_db(self):
+    def test_db(self):
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['db'] = {
                 'type': 'sqlite',
@@ -470,7 +467,7 @@ class OnlineTest(_DjevopsTest):
             'sign-payload': True
         }
 
-    def _test_email(self):
+    def test_email(self):
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['mail'] = {
                 'host': SMTP_HOST,
@@ -498,9 +495,8 @@ class OnlineTest(_DjevopsTest):
         )
         self.assertTrue(email_found, 'Test email was not received')
 
-    def _test_static_files(self):
+    def test_static_files(self):
         self.add_to_settings([
-            "DEBUG = os.getenv('DEBUG') == 'True'",
             "STATIC_ROOT = os.getenv('STATIC_ROOT')"
         ])
         with self.update_deploy_yml() as deploy_yml:
@@ -522,7 +518,7 @@ class OnlineTest(_DjevopsTest):
         self.assertEqual(200, response.status_code)
         self.assertEqual(test_content, response.text)
 
-    def _test_celery(self):
+    def test_celery(self):
         with open('requirements.txt', 'a') as f:
             f.write(f'\ncelery[redis]=={celery.__version__}')
         commit('requirements.txt', 'Add celery')
