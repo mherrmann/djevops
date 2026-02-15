@@ -160,6 +160,12 @@ class OfflineTest(_DjevopsTest):
 
         init(silent=True)
 
+    def test_init_does_not_overwrite(self):
+        self.test_init()
+        for path in ('djevops/deploy.yml', 'djevops/secrets.py'):
+            self.expect_init_error(f'{path} already exists.')
+            remove(path)
+
     def test_deploy(self):
         self.test_init()
 

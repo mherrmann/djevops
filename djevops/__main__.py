@@ -103,6 +103,9 @@ def init(silent=False):
             }
         }
     }
+    for path in ('djevops/deploy.yml', 'djevops/secrets.py'):
+        if exists(path):
+            raise CommandError(f'{path} already exists.')
     makedirs('djevops', exist_ok=True)
     with open('djevops/deploy.yml', 'w') as f:
         f.write(yaml.dump(deploy_yml, sort_keys=False))
