@@ -175,13 +175,9 @@ Install the `test` dependencies from
 doing this is with [`uv`](https://docs.astral.sh/uv/):
 
 ```
-# Need to cd into the subdirectory because pyproject.toml doesn't lie at the
-# project root.
-cd djevops
 uv venv
 source .venv/bin/activate
 uv sync --no-install-project --extra test
-cd ..
 ```
 
 Then, you can do `python -m unittest` to run tests. This requires some API keys

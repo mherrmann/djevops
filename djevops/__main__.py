@@ -181,7 +181,7 @@ def install_djevops_on_server(user, host, verbose):
         'curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1'
     )
     rsync(
-        '-ra',
+        '-raL',
         dirname(__file__) + '/',
         f'{user}@{host}:/opt/djevops/',
         "--include=**.gitignore",
@@ -190,7 +190,13 @@ def install_djevops_on_server(user, host, verbose):
         "--filter=:- .gitignore",
         "--delete-after"
     )
-    ssh_('cd /opt/djevops && ~/.local/bin/uv sync')
+    ssh_(
+        'ln -sf /opt/djevops/pyproject.toml /opt/pyproject.toml && '
+        'ln -sf /opt/djevops/uv.lock /opt/uv.lock && '
+        'cd /opt && '
+        'UV_PROJECT_ENVIRONMENT=/opt/djevops/.venv ~/.local/bin/uv sync && '
+        'rm /opt/pyproject.toml /opt/uv.lock'
+    )
 
 def get_secrets(path):
     if not exists(path):
