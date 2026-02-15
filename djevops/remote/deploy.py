@@ -81,7 +81,6 @@ def main():
             pass
         _run(f'git clone -q -b {git_repo_branch} {git_repo_url} /srv/app')
 
-    log('Setting up .bash_profile for root...')
     symlink_force('/opt/djevops/conf/.bash_profile', '/root/.bash_profile')
 
     install_if_not_installed('supervisor')
@@ -95,10 +94,8 @@ def main():
 
     install_if_not_installed('nginx')
 
-    log('Creating Nginx includes directory...')
     makedirs('/etc/nginx/includes', exist_ok=True)
 
-    log('Creating /var/lib/djevops directory...')
     django_group = 'django'
     ensure_group_exists(django_group)
     makedirs('/var/lib/djevops', exist_ok=True)
