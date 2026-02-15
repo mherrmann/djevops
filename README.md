@@ -170,9 +170,8 @@ breaking changes.
 
 ## Development
 
-Install the `test` dependencies from
-[`djevops/pyproject.toml`](djevops/pyproject.toml). The easiest way I know for
-doing this is with [`uv`](https://docs.astral.sh/uv/):
+Install the `test` dependencies from `pyproject.toml`. The easiest way I know
+for doing this is with [`uv`](https://docs.astral.sh/uv/):
 
 ```
 uv venv
@@ -180,5 +179,5 @@ source .venv/bin/activate
 uv sync --no-install-project --extra test
 ```
 
-Then, you can do `python -m unittest` to run tests. This requires some API keys
-and environment variables.
+Then, you can do `python -m unittest` to run tests. This requires several API
+keys specified in environment variables.
