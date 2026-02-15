@@ -189,8 +189,6 @@ def install_djevops_on_server(user, host, silent):
         dirname(__file__) + '/',
         f'{user}@{host}:/opt/djevops/',
         "--include=**.gitignore",
-        "--exclude=/.git",
-        "--exclude=.venv",
         "--filter=:- .gitignore",
         "--delete-after"
     )
