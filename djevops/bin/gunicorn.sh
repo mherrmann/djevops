@@ -2,7 +2,7 @@
 
 set -eo pipefail
 
-SOCKFILE=/var/run/django/$1.sock
+SOCKFILE=/var/run/djevops/$1.sock
 
 # Create the run directory if it doesn't exist
 RUNDIR=$(dirname $SOCKFILE)

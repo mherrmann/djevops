@@ -1,5 +1,5 @@
 upstream $SERVICE {
-  server unix:/var/run/django/$SERVICE.sock fail_timeout=0;
+  server unix:/var/run/djevops/$SERVICE.sock fail_timeout=0;
 }
 
 server {
