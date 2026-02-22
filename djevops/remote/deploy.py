@@ -49,14 +49,20 @@ def main():
     install_if_not_installed('git')
 
     if git_repo_key and not exists('/root/.ssh/id_rsa'):
-        log('Setting up SSH keys for cloning the Git repository...')
         git_key = secrets[git_repo_key]
-        makedirs('/root/.ssh', exist_ok=True)
-        with open('/root/.ssh/id_rsa', 'w') as f:
-            f.write(git_key)
-        chmod('/root/.ssh/id_rsa', 0o600)
-        _run('ssh-keygen -y -f /root/.ssh/id_rsa > /root/.ssh/id_rsa.pub')
-        chmod('/root/.ssh/id_rsa.pub', 0o644)
+        try:
+            with open('/root/.ssh/id_rsa') as f:
+                curr_git_key = f.read()
+        except FileNotFoundError:
+            curr_git_key = None
+        if git_key != curr_git_key:
+            log('Setting up SSH keys for cloning the Git repository...')
+            makedirs('/root/.ssh', exist_ok=True)
+            with open('/root/.ssh/id_rsa', 'w') as f:
+                f.write(git_key)
+            chmod('/root/.ssh/id_rsa', 0o600)
+            _run('ssh-keygen -y -f /root/.ssh/id_rsa > /root/.ssh/id_rsa.pub')
+            chmod('/root/.ssh/id_rsa.pub', 0o644)
 
     try:
         with open('/root/.ssh/known_hosts') as f:
