@@ -1,7 +1,7 @@
-# djevops: Deploy Django easily
+# djevops: Self-host Django easily
 
 djevops is a command-line tool for deploying Django web apps to Linux VPSs.
-Unlike other tools, djevops runs Django directly, without Docker. This makes
+Unlike other tools, djevops runs Django without Docker. This makes
 development faster and easier.
 
 To get started with djevops, all you need is SSH root access to a Linux VPS
