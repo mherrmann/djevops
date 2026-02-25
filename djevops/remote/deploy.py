@@ -1,6 +1,7 @@
 from datetime import datetime
 from djevops.config import get_services_users_envs, SQLITE_DB_FILE, \
     interpolate_secrets
+from djevops.litestream import get_litestream_config
 from djevops.remote.actions import install_python_deps, migrate_db, \
     collect_static_files, get_django_setting
 from djevops.remote.scaffold import get_deploy_config, get_secrets
@@ -333,12 +334,8 @@ def main():
                 )
                 _run(['dpkg', '-i', deb_path])
                 remove(deb_path)
-            litestream_config = {
-                'dbs': [{
-                    'path': SQLITE_DB_FILE,
-                    'replica': interpolate_secrets(backup, secrets)
-                }]
-            }
+            backup_config = interpolate_secrets(backup, secrets)
+            litestream_config = get_litestream_config(backup_config)
             with open('/etc/litestream.yml', 'w') as f:
                 yaml.safe_dump(litestream_config, f)
             if not exists(SQLITE_DB_FILE):

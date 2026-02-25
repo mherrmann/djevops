@@ -1,5 +1,7 @@
 from djevops import GIT_HINT
-from djevops.config import get_services_users_envs, get_django_service
+from djevops.config import get_services_users_envs, get_django_service, \
+    interpolate_secrets, SQLITE_DB_FILE
+from djevops.litestream import get_litestream_config
 from djevops.util import git, get_apt_install_cmd, run_in_django_shell, \
     run_silently
 from functools import partial
@@ -7,6 +9,7 @@ from os import remove, makedirs
 from os.path import dirname, exists
 from runpy import run_path
 from shlex import quote
+from shutil import which
 from subprocess import run
 from tempfile import NamedTemporaryFile
 from urllib.parse import urlparse
@@ -117,19 +120,16 @@ def init(quiet=False):
         print(f'To deploy your Django app to a server, run: djevops deploy')
 
 def deploy(quiet=False, dry_run=False):
-    deploy_yml = 'djevops/deploy.yml'
-    with open(deploy_yml) as f:
-        deploy_config = yaml.safe_load(f)
-    secrets = get_secrets('djevops/secrets.py')
+    config, secrets = load_config()
 
-    check_config(deploy_config, secrets)
+    check_config(config, secrets)
 
     if dry_run:
         return
 
-    server = deploy_config['server']
+    server = config['server']
     install_djevops_on_server('root', server, quiet)
-    rsync('-a', deploy_yml, f'root@{server}:/root/deploy.yml')
+    rsync('-a', 'djevops/deploy.yml', f'root@{server}:/root/deploy.yml')
 
     secrets_json = NamedTemporaryFile(mode='w', delete=False, suffix='.json')
     json.dump(secrets, secrets_json, indent=2, sort_keys=True)
@@ -142,6 +142,36 @@ def deploy(quiet=False, dry_run=False):
     run_with_djevops_venv(
         'root', server, 'python -u -m djevops.remote.deploy', quiet
     )
+
+def getbackup(quiet=False):
+    config, secrets = load_config()
+    try:
+        backup = config['db']['backup']
+    except KeyError:
+        raise CommandError('No backup configured in djevops/deploy.yml')
+    if not which('litestream'):
+        raise CommandError('Please install https://litestream.io first')
+    backup_config = interpolate_secrets(backup, secrets)
+    litestream_config = get_litestream_config(backup_config)
+    config_file = NamedTemporaryFile(mode='w', delete=False, suffix='.yml')
+    yaml.safe_dump(litestream_config, config_file)
+    config_file.close()
+    output = 'db.sqlite3'
+    try:
+        run_silently([
+            'litestream', 'restore', '-config', config_file.name, '-o', output,
+            SQLITE_DB_FILE
+        ])
+    finally:
+        remove(config_file.name)
+    if not quiet:
+        print(f'Downloaded backup to {output}')
+
+def load_config():
+    with open('djevops/deploy.yml') as f:
+        config = yaml.safe_load(f)
+    secrets = get_secrets('djevops/secrets.py')
+    return config, secrets
 
 def check_config(deploy_config, secrets):
     server_ip = deploy_config.get('server')
@@ -228,7 +258,7 @@ def get_ssh_command():
 
 def main():
     if len(sys.argv) < 2 or len(sys.argv) > 3:
-        print('Usage: djevops init|deploy [--quiet]')
+        print('Usage: djevops init|deploy|getbackup [--quiet]')
         sys.exit(0)
     command = sys.argv[1]
     quiet = len(sys.argv) == 3 and sys.argv[2] == '--quiet'
@@ -237,6 +267,8 @@ def main():
             init(quiet)
         elif command == 'deploy':
             deploy(quiet)
+        elif command == 'getbackup':
+            getbackup(quiet)
         else:
             raise CommandError(f'Unknown command: {command}')
     except CommandError as e:

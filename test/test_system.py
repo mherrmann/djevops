@@ -1,7 +1,6 @@
 from botocore.config import Config
 from contextlib import closing, contextmanager
-from djevops.__main__ import CommandError, init, deploy
-from djevops.config import SQLITE_DB_FILE
+from djevops.__main__ import CommandError, init, deploy, getbackup
 from djevops.remote.actions import MANAGE_SH
 from djevops.util import git, run_silently
 from dnsimple import Client as DNSimpleClient
@@ -440,17 +439,9 @@ class OnlineTest(_DjevopsTest):
             ])
 
     def _execute_against_db_backup(self, sql):
-        litestream_yml_contents = self._ssh('cat /etc/litestream.yml')
-        with TemporaryDirectory() as tmp_dir:
-            litestream_yml = Path(tmp_dir) / 'litestream.yml'
-            litestream_yml.write_text(litestream_yml_contents)
-            db_file = Path(tmp_dir) / 'db.sqlite3'
-            run_silently([
-                'litestream', 'restore', '-config', litestream_yml, '-o',
-                db_file, SQLITE_DB_FILE
-            ])
-            with closing(sqlite3.connect(db_file)) as connection:
-                return connection.execute(sql).fetchone()[0]
+        getbackup(QUIET)
+        with closing(sqlite3.connect('db.sqlite3')) as connection:
+            return connection.execute(sql).fetchone()[0]
 
     def _get_litestream_config(self, plain_secrets=True):
         return {
