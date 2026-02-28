@@ -18,6 +18,7 @@ import json
 import os
 import re
 import sys
+import tomllib
 import yaml
 
 SAMPLE_SERVER_IP = '0.0.0.0'
@@ -64,19 +65,16 @@ def init(quiet=False):
             "There is no manage.py file in the current directory. If you add "
             "one, don't forget to commit *and push* your changes to Git."
         )
-    if not exists('requirements.txt'):
-        raise CommandError(
-            'Please create a requirements.txt file. For example, by running:\n'
-            '    pip freeze > requirements.txt\n' + GIT_HINT
-        )
-    with open('requirements.txt') as f:
-        requirements = f.read()
+    if not exists('pyproject.toml'):
+        raise CommandError('Please create a pyproject.toml file. ' + GIT_HINT)
+    with open('pyproject.toml', 'rb') as f:
+        pyproject = tomllib.load(f)
+    deps = pyproject.get('project', {}).get('dependencies', [])
     for dep in ('django', 'gunicorn'):
-        if not re.search(
-            rf'^{dep}\s*\b', requirements, re.MULTILINE | re.IGNORECASE
-        ):
+        if not any(re.match(rf'{dep}\b', d, re.IGNORECASE) for d in deps):
             raise CommandError(
-                f'Please add `{dep}` to your requirements.txt file. ' + GIT_HINT
+                f'Please add `{dep}` to [project.dependencies] in '
+                f'pyproject.toml. ' + GIT_HINT
             )
     remote = remotes[0]
     remote_url = git('remote', 'get-url', remote)

@@ -24,6 +24,8 @@ import django
 import os
 import requests
 import sqlite3
+import tomli_w
+import tomllib
 import yaml
 
 
@@ -135,27 +137,23 @@ class OfflineTest(_DjevopsTest):
         self.start_django_project()
 
         self.expect_init_error(
-            'Please create a requirements.txt file. For example, by '
-            "running:\n"
-            "    pip freeze > requirements.txt\n"
+            "Please create a pyproject.toml file. Don't forget to commit *and "
+            "push* your changes to Git."
+        )
+        _write_pyproject_toml()
+
+        self.expect_init_error(
+            "Please add `django` to [project.dependencies] in pyproject.toml. "
             "Don't forget to commit *and push* your changes to Git."
         )
-        open('requirements.txt', 'w').close()
+        _add_dep_to_pyproject_toml(f'Django=={django.get_version()}')
 
         self.expect_init_error(
-            "Please add `django` to your requirements.txt file. Don't forget "
-            "to commit *and push* your changes to Git."
+            "Please add `gunicorn` to [project.dependencies] in "
+            "pyproject.toml. Don't forget to commit *and push* your changes to "
+            "Git."
         )
-        with open('requirements.txt', 'w') as f:
-            # Uppercase D to mirror the output produced by `pip freeze`.
-            f.write('Django==' + django.get_version())
-
-        self.expect_init_error(
-            "Please add `gunicorn` to your requirements.txt file. Don't forget "
-            "to commit *and push* your changes to Git."
-        )
-        with open('requirements.txt', 'a') as f:
-            f.write(f'\ngunicorn=={GUNICORN_VERSION}')
+        _add_dep_to_pyproject_toml(f'gunicorn=={GUNICORN_VERSION}')
 
         git('add', '.')
         git('commit', '-m', 'Initial commit')
@@ -321,9 +319,9 @@ class OnlineTest(_DjevopsTest):
     def init_test_app(cls):
         cls.start_django_project()
         cls.start_django_app()
-        with open('requirements.txt', 'w') as f:
-            f.write(f'django=={django.get_version()}\n')
-            f.write(f'gunicorn=={GUNICORN_VERSION}')
+        _write_pyproject_toml()
+        _add_dep_to_pyproject_toml(f'django=={django.get_version()}')
+        _add_dep_to_pyproject_toml(f'gunicorn=={GUNICORN_VERSION}')
         cls.add_to_settings([
             "import os",
             "DEBUG = os.getenv('DEBUG') == 'True'",
@@ -510,9 +508,8 @@ class OnlineTest(_DjevopsTest):
         self.assertEqual(test_content, response.text)
 
     def test_celery(self):
-        with open('requirements.txt', 'a') as f:
-            f.write(f'\ncelery[redis]=={celery.__version__}')
-        commit('requirements.txt', 'Add celery')
+        _add_dep_to_pyproject_toml(f'celery[redis]=={celery.__version__}')
+        commit('pyproject.toml', 'Add celery')
 
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['services']['celery'] = {
@@ -703,6 +700,20 @@ def delete_directory_from_s3(
     for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
         objects = [{'Key': obj['Key']} for obj in page.get('Contents', [])]
         s3.delete_objects(Bucket=bucket, Delete={'Objects': objects})
+
+def _write_pyproject_toml():
+    pyproject = {'project': {
+        'name': 'test', 'version': '0', 'dependencies': []
+    }}
+    with open('pyproject.toml', 'wb') as f:
+        tomli_w.dump(pyproject, f)
+
+def _add_dep_to_pyproject_toml(dep):
+    with open('pyproject.toml', 'rb') as f:
+        pyproject = tomllib.load(f)
+    pyproject['project']['dependencies'].append(dep)
+    with open('pyproject.toml', 'wb') as f:
+        tomli_w.dump(pyproject, f)
 
 def cd_to_temp_dir():
     cwd_before = os.getcwd()

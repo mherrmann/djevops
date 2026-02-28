@@ -23,6 +23,7 @@ test = [
     "dnsimple==2.15.0",
     "hcloud==2.13.0",
     "requests==2.32.5",
+    "tomli-w==1.2.0",
 ]
 
 [build-system]

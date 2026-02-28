@@ -7,10 +7,11 @@ import json
 MANAGE_SH = '/opt/djevops/bin/manage.sh'
 
 def install_python_deps():
-    run_silently([
-        '/root/.local/bin/uv', 'pip', 'install', '--python', '/srv/venv',
-        '-r', '/srv/app/requirements.txt'
-    ])
+    run_silently(
+        'cd /srv/app && UV_PROJECT_ENVIRONMENT=/srv/venv '
+        '/root/.local/bin/uv sync -q --no-install-project',
+        shell=True
+    )
 
 def migrate_db():
     _run_manage_sh('migrate')
