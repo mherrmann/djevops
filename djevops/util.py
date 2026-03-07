@@ -58,3 +58,13 @@ def is_ip(host):
         return True
     except ValueError:
         return False
+
+def prompt_yes_no(question):
+    while True:
+        answer = input(question + ' [y/n] ')
+        if answer.lower() == 'y':
+            return True
+        elif answer.lower() == 'n':
+            return False
+        else:
+            print('Please answer y or n.')

@@ -1,9 +1,10 @@
+from argparse import ArgumentParser
 from djevops import GIT_HINT
 from djevops.config import get_services_users_envs, get_django_service, \
     interpolate_secrets, SQLITE_DB_FILE
 from djevops.litestream import get_litestream_config
-from djevops.util import git, get_apt_install_cmd, run_in_django_shell, \
-    run_silently
+from djevops.util import git, get_apt_install_cmd, prompt_yes_no, \
+    run_in_django_shell, run_silently
 from functools import partial
 from os import remove, makedirs
 from os.path import dirname, exists
@@ -141,7 +142,7 @@ def deploy(quiet=False, dry_run=False):
         'root', server, 'python -u -m djevops.remote.deploy', quiet
     )
 
-def getbackup(quiet=False):
+def getbackup(quiet=False, force=False):
     config, secrets = load_config()
     try:
         backup = config['db']['backup']
@@ -155,6 +156,16 @@ def getbackup(quiet=False):
     yaml.safe_dump(litestream_config, config_file)
     config_file.close()
     output = 'db.sqlite3'
+    if exists(output):
+        if force:
+            remove(output)
+        elif sys.stdin.isatty():
+            if prompt_yes_no(f'{output} already exists. Overwrite?'):
+                remove(output)
+            else:
+                return
+        else:
+            raise CommandError(f'{output} already exists. Please remove it.')
     try:
         run_silently([
             'litestream', 'restore', '-config', config_file.name, '-o', output,
@@ -255,20 +266,26 @@ def get_ssh_command():
         return 'ssh'
 
 def main():
-    if len(sys.argv) < 2 or len(sys.argv) > 3:
-        print('Usage: djevops init|deploy|getbackup [--quiet]')
-        sys.exit(0)
-    command = sys.argv[1]
-    quiet = len(sys.argv) == 3 and sys.argv[2] == '--quiet'
+    parser = ArgumentParser(prog='djevops')
+    subs = parser.add_subparsers(dest='command', required=True)
+
+    for sub in (
+        subs.add_parser('init'),
+        subs.add_parser('deploy'),
+        subs.add_parser('getbackup'),
+    ):
+        sub.add_argument('--quiet', action='store_true')
+    subs.choices['deploy'].add_argument('--dry-run', action='store_true')
+    subs.choices['getbackup'].add_argument('--force', action='store_true')
+
+    args = parser.parse_args()
     try:
-        if command == 'init':
-            init(quiet)
-        elif command == 'deploy':
-            deploy(quiet)
-        elif command == 'getbackup':
-            getbackup(quiet)
-        else:
-            raise CommandError(f'Unknown command: {command}')
+        if args.command == 'init':
+            init(args.quiet)
+        elif args.command == 'deploy':
+            deploy(args.quiet, args.dry_run)
+        elif args.command == 'getbackup':
+            getbackup(args.quiet, args.force)
     except CommandError as e:
         sys.stderr.write(e.args[0] + '\n')
         sys.exit(1)
