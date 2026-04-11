@@ -437,7 +437,7 @@ class OnlineTest(_DjevopsTest):
             ])
 
     def _execute_against_db_backup(self, sql):
-        getbackup(QUIET)
+        getbackup(QUIET, force=True)
         with closing(sqlite3.connect('db.sqlite3')) as connection:
             return connection.execute(sql).fetchone()[0]
 
