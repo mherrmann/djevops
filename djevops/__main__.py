@@ -32,7 +32,7 @@ SAMPLE_SECRETS_PY = """
 #
 # The motivation for keeping secrets in a separate file is that you usually do
 # not want to commit them to Git. One approach you can use is to hard-code your
-# secrets here and only store djevops' deploy.yml file in Git.
+# secrets here and only store djevops' djevops.yml file in Git.
 #
 # Another approach is to read secrets from environment variables. For example:
 #
@@ -105,17 +105,17 @@ def init(quiet=False):
             }
         }
     }
-    for path in ('djevops/deploy.yml', 'djevops/secrets.py'):
+    for path in ('deploy/djevops.yml', 'deploy/secrets.py'):
         if exists(path):
             raise CommandError(f'{path} already exists.')
-    makedirs('djevops', exist_ok=True)
-    with open('djevops/deploy.yml', 'w') as f:
+    makedirs('deploy', exist_ok=True)
+    with open('deploy/djevops.yml', 'w') as f:
         f.write(yaml.dump(deploy_yml, sort_keys=False))
-    with open('djevops/secrets.py', 'w') as f:
+    with open('deploy/secrets.py', 'w') as f:
         f.write(SAMPLE_SECRETS_PY)
     if not quiet:
-        print('Created djevops/deploy.yml')
-        print('Created djevops/secrets.py')
+        print('Created deploy/djevops.yml')
+        print('Created deploy/secrets.py')
         print(f'To deploy your Django app to a server, run: djevops deploy')
 
 def deploy(quiet=False, dry_run=False):
@@ -128,7 +128,7 @@ def deploy(quiet=False, dry_run=False):
 
     server = config['server']
     install_djevops_on_server('root', server, quiet)
-    rsync('-a', 'djevops/deploy.yml', f'root@{server}:/root/deploy.yml')
+    rsync('-a', 'deploy/djevops.yml', f'root@{server}:/root/deploy.yml')
 
     secrets_json = NamedTemporaryFile(mode='w', delete=False, suffix='.json')
     json.dump(secrets, secrets_json, indent=2, sort_keys=True)
@@ -147,7 +147,7 @@ def getbackup(quiet=False, force=False):
     try:
         backup = config['db']['backup']
     except KeyError:
-        raise CommandError('No backup configured in djevops/deploy.yml')
+        raise CommandError('No backup configured in deploy/djevops.yml')
     if not which('litestream'):
         raise CommandError('Please install https://litestream.io first')
     backup_config = interpolate_secrets(backup, secrets)
@@ -181,7 +181,7 @@ def shell():
     try:
         django_service_name, _ = get_django_service(config)
     except LookupError:
-        raise CommandError('No Django service found in djevops/deploy.yml')
+        raise CommandError('No Django service found in deploy/djevops.yml')
     server = config['server']
     remote_cmd = 'cd /srv/app && exec python manage.py shell'
     su_cmd = f'su - {django_service_name} -c {quote(remote_cmd)}'
@@ -189,16 +189,16 @@ def shell():
     run(f'{ssh_cmd} -t root@{server} {quote(su_cmd)}', shell=True)
 
 def load_config():
-    with open('djevops/deploy.yml') as f:
+    with open('deploy/djevops.yml') as f:
         config = yaml.safe_load(f)
-    secrets = get_secrets('djevops/secrets.py')
+    secrets = get_secrets('deploy/secrets.py')
     return config, secrets
 
 def check_config(deploy_config, secrets):
     server_ip = deploy_config.get('server')
     if not server_ip or server_ip == SAMPLE_SERVER_IP:
         raise CommandError(
-            "Please set your server's IP address in djevops/deploy.yml. For "
+            "Please set your server's IP address in deploy/djevops.yml. For "
             "example:\n"
             "    server: 1.2.3.4"
         )
@@ -208,7 +208,7 @@ def check_config(deploy_config, secrets):
     except LookupError:
         raise CommandError(
             'Please add at least one service of type `django` to '
-            'djevops/deploy.yml. For example:\n'
+            'deploy/djevops.yml. For example:\n'
             '    services:\n'
             '      web:\n'
             '        type: django'

@@ -33,7 +33,7 @@ def check_allowed_hosts(server_ip):
             f'example, in {SETTINGS_PY}:\n\n'
             '    import os\n'
             '    ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(" ")\n\n'
-            'And in djevops/deploy.yml:\n\n'
+            'And in deploy/djevops.yml:\n\n'
             '    services:\n'
             '      web:\n'
             '        type: django\n'

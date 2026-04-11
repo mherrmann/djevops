@@ -35,7 +35,7 @@ mail:
 ```
 
 Secrets such as `DJANGO_SECRET_KEY` or `SMTP_PASSWORD` can be specified as
-constants in file `djevops/secrets.py`.
+constants in file `deploy/secrets.py`.
 
 Most config values are optional. Fill in the ones you want and run
 `djevops deploy`. djevops then clones your Git repo on the `server` and starts
@@ -135,7 +135,7 @@ compresses log files.
 <summary>Secret handling</summary>
 
 Very often, you have secrets that you need on the server but should not commit
-to Git. djevops lets you specify such values in the file `djevops/secrets.py`,
+to Git. djevops lets you specify such values in the file `deploy/secrets.py`,
 and refer to them from your config file. The way this works is that `secrets.py`
 gets executed on your local machine, and the produced values then get uploaded
 as constants to the server. This gives you a lot of flexibility. You can
@@ -173,7 +173,7 @@ breaking changes.
 
 Just type `djevops shell` to be dropped into a remote Django shell on your
 server. This uses the environment variables and user of the first service of
-type `django` in `djevops/deploy.yml`.
+type `django` in `deploy/djevops.yml`.
 </details>
 
 ## Development

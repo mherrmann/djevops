@@ -85,10 +85,10 @@ class _DjevopsTest(TestCase):
     @classmethod
     @contextmanager
     def update_deploy_yml(cls):
-        with open('djevops/deploy.yml') as f:
+        with open('deploy/djevops.yml') as f:
             deploy_yml = yaml.safe_load(f)
         yield deploy_yml
-        with open('djevops/deploy.yml', 'w') as f:
+        with open('deploy/djevops.yml', 'w') as f:
             f.write(yaml.dump(deploy_yml))
 
     @classmethod
@@ -99,7 +99,7 @@ class _DjevopsTest(TestCase):
             commit(cls.SETTINGS_PY_RELPATH, 'Add to settings.py')
 
     def add_to_secrets(self, dict_):
-        with open('djevops/secrets.py', 'a') as f:
+        with open('deploy/secrets.py', 'a') as f:
             for key, value in dict_.items():
                 f.write(f'{key} = {value!r}\n')
 
@@ -162,7 +162,7 @@ class OfflineTest(_DjevopsTest):
 
     def test_init_does_not_overwrite(self):
         self.test_init()
-        for path in ('djevops/deploy.yml', 'djevops/secrets.py'):
+        for path in ('deploy/djevops.yml', 'deploy/secrets.py'):
             self.expect_init_error(f'{path} already exists.')
             remove(path)
 
@@ -170,7 +170,7 @@ class OfflineTest(_DjevopsTest):
         self.test_init()
 
         self.expect_deploy_error(
-            "Please set your server's IP address in djevops/deploy.yml. For "
+            "Please set your server's IP address in deploy/djevops.yml. For "
             "example:\n"
             "    server: 1.2.3.4"
         )
@@ -184,7 +184,7 @@ class OfflineTest(_DjevopsTest):
             f'For example, in {self.SETTINGS_PY_RELPATH}:\n\n'
             '    import os\n'
             '    ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(" ")\n\n'
-            f'And in djevops/deploy.yml:\n\n'
+            f'And in deploy/djevops.yml:\n\n'
             '    services:\n'
             '      web:\n'
             '        type: django\n'
