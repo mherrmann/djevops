@@ -176,6 +176,18 @@ def getbackup(quiet=False, force=False):
     if not quiet:
         print(f'Downloaded backup to {output}')
 
+def shell():
+    config, _ = load_config()
+    try:
+        django_service_name, _ = get_django_service(config)
+    except LookupError:
+        raise CommandError('No Django service found in djevops/deploy.yml')
+    server = config['server']
+    remote_cmd = 'cd /srv/app && exec python manage.py shell'
+    su_cmd = f'su - {django_service_name} -c {quote(remote_cmd)}'
+    ssh_cmd = get_ssh_command()
+    run(f'{ssh_cmd} -t root@{server} {quote(su_cmd)}', shell=True)
+
 def load_config():
     with open('djevops/deploy.yml') as f:
         config = yaml.safe_load(f)
@@ -277,6 +289,7 @@ def main():
         sub.add_argument('--quiet', action='store_true')
     subs.choices['deploy'].add_argument('--dry-run', action='store_true')
     subs.choices['getbackup'].add_argument('--force', action='store_true')
+    subs.add_parser('shell')
 
     args = parser.parse_args()
     try:
@@ -286,6 +299,8 @@ def main():
             deploy(args.quiet, args.dry_run)
         elif args.command == 'getbackup':
             getbackup(args.quiet, args.force)
+        elif args.command == 'shell':
+            shell()
     except CommandError as e:
         sys.stderr.write(e.args[0] + '\n')
         sys.exit(1)

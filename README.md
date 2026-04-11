@@ -168,6 +168,14 @@ This does not apply major version upgrades, which could introduce potentially
 breaking changes.
 </details>
 
+<details>
+<summary>Easy access to `manage.py shell` on the server</summary>
+
+Just type `djevops shell` to be dropped into a remote Django shell on your
+server. This uses the environment variables and user of the first service of
+type `django` in `djevops/deploy.yml`.
+</details>
+
 ## Development
 
 Install the `test` dependencies from `pyproject.toml`. The easiest way I know
