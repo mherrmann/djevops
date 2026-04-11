@@ -561,6 +561,21 @@ class OnlineTest(_DjevopsTest):
         output = self._execute_remote_django_shell(run_task_script, 'web')
         self.assertIn('celery works', output)
 
+    def test_command(self):
+        service_name = 'mycmd'
+        marker = f'command-works-{self.test_name}'
+        with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['services'][service_name] = {
+                'type': 'command',
+                'command': f"echo {marker} && exec sleep infinity",
+                'env': {'inherit': 'web'}
+            }
+
+        deploy(QUIET)
+
+        output = self._ssh(f'cat /var/log/{service_name}.log')
+        self.assertIn(marker, output)
+
     def _execute_remote_sql(self, sql, user):
         django_cmd = [
             "from django.db import connection",

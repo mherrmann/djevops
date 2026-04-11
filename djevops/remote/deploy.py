@@ -11,6 +11,7 @@ from os import chmod, makedirs, remove, chown, symlink
 from os.path import exists
 from pwd import getpwnam
 from random import randint
+from shlex import quote
 from shutil import rmtree, copyfile, which
 from subprocess import PIPE, STDOUT, run, CalledProcessError, DEVNULL
 from time import sleep
@@ -144,6 +145,7 @@ def main():
             _chown(f'{home_dir}/.bashrc', user, user)
             created_users.add(user)
         service = services[service_name]
+        replacements = {'$SERVICE': service_name, '$USER': user}
         if service['type'] == 'django':
             if not primary_domain:
                 for host in get_django_setting('ALLOWED_HOSTS', env):
@@ -186,11 +188,15 @@ def main():
             )
             if domains:
                 service_domains[service_name] = domains[:]
-        elif service['type'] == 'celery':
-            supervisor_conf_file = 'celery.conf'
+        elif service['type'] in ('celery', 'command'):
+            supervisor_conf_file = 'command.conf'
+            if service['type'] == 'celery':
+                command = f'/opt/djevops/bin/celery.sh {service_name}'
+            else:
+                command = service['command']
+            replacements['$COMMAND'] = quote(command)
         else:
             error(f"Unknown service type: {service['type']}")
-        replacements = {'$SERVICE': service_name, '$USER': user}
         copy_with_replace(
             f'/opt/djevops/conf/supervisor/{supervisor_conf_file}',
             f'/etc/supervisor/conf.d/{service_name}.conf',

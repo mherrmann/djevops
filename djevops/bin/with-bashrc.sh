@@ -7,4 +7,4 @@
 export USER=$(getent passwd | cut -d : -f 1,3 | grep ":$(id -u)$" | cut -d : -f 1)
 export HOME=$(getent passwd $USER | cut -d : -f 6)
 source $HOME/.bashrc
-exec $@
+exec "$@"
