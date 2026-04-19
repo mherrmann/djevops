@@ -48,17 +48,21 @@ class GetServicesUsersEnvsTest(TestCase):
                     },
                     'celery': {
                         'type': 'celery',
-                        'env': {'inherit': 'web'}
+                        'env': {
+                            'inherit': 'web',
+                            'clear': {'FOO': 'BAR'}
+                        }
                     }
                 }
             },
             {
                 'web': ('web', {'DEBUG': 'False'}),
-                'celery': ('web', {'DEBUG': 'False'})
+                'celery': ('celery', {'DEBUG': 'False', 'FOO': 'BAR'})
             }
         )
 
-    def test_inherit_processed_after_parent(self):
+    def test_transitive_inherit(self):
+        self.maxDiff = None
         self._check(
             {
                 'services': {
@@ -68,13 +72,21 @@ class GetServicesUsersEnvsTest(TestCase):
                     },
                     'web': {
                         'type': 'django',
-                        'env': {'clear': {'DEBUG': 'False'}}
+                        'env': {
+                            'inherit': 'base',
+                            'clear': {'DEBUG': 'False'}
+                        }
+                    },
+                    'base': {
+                        'type': 'django',
+                        'env': {'clear': {'BASE': 'VALUE'}}
                     }
                 }
             },
             {
-                'web': ('web', {'DEBUG': 'False'}),
-                'celery': ('web', {'DEBUG': 'False'})
+                'base': ('base', {'BASE': 'VALUE'}),
+                'web': ('web', {'DEBUG': 'False', 'BASE': 'VALUE'}),
+                'celery': ('web', {'DEBUG': 'False', 'BASE': 'VALUE'})
             }
         )
 

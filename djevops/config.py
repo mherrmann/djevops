@@ -8,25 +8,25 @@ DEFAULT_ENV = {
 
 def get_services_users_envs(config, secrets):
     result = {}
-    services = config['services'].items()
-    for service_name, service in services:
-        env_config = service.get('env', {})
-        if list(env_config) == ['inherit']:
-            # Handled further below.
-            continue
-        user = service_name
-        env = DEFAULT_ENV.copy()
-        env.update(env_config.get('clear', {}))
-        for secret_name in env_config.get('secret', []):
-            env[secret_name] = secrets[secret_name]
-        result[service_name] = (user, env)
-    # Do a second pass to handle `inherit`.
-    for service_name, service in services:
-        env_config = service.get('env', {})
-        if list(env_config) != ['inherit']:
-            continue
-        user, env = result[env_config['inherit']]
-        result[service_name] = (user, env)
+    services = config['services']
+    def resolve(service_name):
+        if service_name not in result:
+            service = services[service_name]
+            env_config = service.get('env', {})
+            parent_name = env_config.get('inherit')
+            if parent_name:
+                user, base = resolve(parent_name)
+            else:
+                user, base = service_name, DEFAULT_ENV
+            given_here = env_config.get('clear', {})
+            for secret_name in env_config.get('secret', []):
+                given_here[secret_name] = secrets[secret_name]
+            if given_here:
+                user = service_name
+            result[service_name] = (user, {**base, **given_here})
+        return result[service_name]
+    for service_name in services:
+        resolve(service_name)
     return result
 
 def get_django_service(config):
