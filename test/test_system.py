@@ -379,21 +379,26 @@ class OnlineTest(_DjevopsTest):
         self.assertEqual(response.status_code, 200)
         self.assertIn('The install worked', response.text)
 
-    def test_db(self):
+    def test_getbackup_without_config(self):
+        self._configure_db()
+        git('push')
+        deploy(QUIET)
+        self.assertGreater(
+            self._execute_against_db_backup(
+                "SELECT COUNT(*) FROM django_migrations"
+            ),
+            0
+        )
+
+    def test_db_backup(self):
+        self._configure_db()
         with self.update_deploy_yml() as deploy_yml:
-            deploy_yml['db'] = {
-                'type': 'sqlite',
-                'backup': self._get_litestream_config(plain_secrets=False)
-            }
+            deploy_yml['db']['backup'] = \
+                self._get_litestream_config(plain_secrets=False)
         self.add_to_secrets({
             'S3_ACCESS_KEY': S3_ACCESS_KEY,
             'S3_SECRET_KEY': S3_SECRET_KEY
         })
-        self.add_to_settings([
-            "DATABASES['default']['NAME'] = os.getenv('SQLITE_DB_FILE') "
-            "or DATABASES['default']['NAME']"
-        ])
-        git('push')
 
         table = self.test_name
         self._upload_mock_db_backup_to_s3(f"CREATE TABLE {table}(id)")
@@ -417,6 +422,14 @@ class OnlineTest(_DjevopsTest):
             sleep(1)
         else:
             self.fail(f'Backup was not created')
+
+    def _configure_db(self):
+        with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['db'] = {'type': 'sqlite'}
+        self.add_to_settings([
+            "DATABASES['default']['NAME'] = os.getenv('SQLITE_DB_FILE') "
+            "or DATABASES['default']['NAME']"
+        ])
 
     def _upload_mock_db_backup_to_s3(self, sql):
         with TemporaryDirectory() as tmp_dir:

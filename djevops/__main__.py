@@ -7,9 +7,9 @@ from djevops.util import git, get_apt_install_cmd, prompt_yes_no, \
     run_in_django_shell, run_silently
 from functools import partial
 from os import remove, makedirs
-from os.path import dirname, exists
+from os.path import basename, dirname, exists
 from runpy import run_path
-from shlex import quote
+from shlex import quote, split
 from shutil import which
 from subprocess import run
 from tempfile import NamedTemporaryFile
@@ -144,18 +144,7 @@ def deploy(quiet=False, dry_run=False):
 
 def getbackup(quiet=False, force=False):
     config, secrets = load_config()
-    try:
-        backup = config['db']['backup']
-    except KeyError:
-        raise CommandError('No backup configured in deploy/djevops.yml')
-    if not which('litestream'):
-        raise CommandError('Please install https://litestream.io first')
-    backup_config = interpolate_secrets(backup, secrets)
-    litestream_config = get_litestream_config(backup_config)
-    config_file = NamedTemporaryFile(mode='w', delete=False, suffix='.yml')
-    yaml.safe_dump(litestream_config, config_file)
-    config_file.close()
-    output = 'db.sqlite3'
+    output = basename(SQLITE_DB_FILE)
     if exists(output):
         if force:
             remove(output)
@@ -167,14 +156,29 @@ def getbackup(quiet=False, force=False):
         else:
             raise CommandError(f'{output} already exists. Please remove it.')
     try:
+        backup = config['db']['backup']
+    except KeyError:
+        scp(f"root@{config['server']}:{SQLITE_DB_FILE}", output)
+    else:
+        _restore_with_litestream(backup, secrets, output)
+    if not quiet:
+        print(f'Downloaded backup to {output}')
+
+def _restore_with_litestream(backup, secrets, output):
+    if not which('litestream'):
+        raise CommandError('Please install https://litestream.io first')
+    backup_config = interpolate_secrets(backup, secrets)
+    litestream_config = get_litestream_config(backup_config)
+    config_file = NamedTemporaryFile(mode='w', delete=False, suffix='.yml')
+    yaml.safe_dump(litestream_config, config_file)
+    config_file.close()
+    try:
         run_silently([
             'litestream', 'restore', '-config', config_file.name, '-o', output,
             SQLITE_DB_FILE
         ])
     finally:
         remove(config_file.name)
-    if not quiet:
-        print(f'Downloaded backup to {output}')
 
 def shell():
     config, _ = load_config()
@@ -270,6 +274,10 @@ def ssh(user, host, cmd, quiet):
     ssh_cmd = get_ssh_command()
     run_ = run_silently if quiet else partial(run, check=True)
     run_(f'{ssh_cmd} {user}@{host} {quote(cmd)}', shell=True)
+
+def scp(src, dst):
+    ssh_opts = split(get_ssh_command())[1:]
+    run_silently(['scp', *ssh_opts, src, dst])
 
 def get_ssh_command():
     try:
