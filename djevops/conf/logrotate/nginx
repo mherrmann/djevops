@@ -1,5 +1,5 @@
-/var/log/nginx/$SERVICE-access.log
-/var/log/nginx/$SERVICE-error.log {
+/var/log/$SERVICE-access.log
+/var/log/$SERVICE-error.log {
     create 0640 www-data adm
     missingok
     rotate 5

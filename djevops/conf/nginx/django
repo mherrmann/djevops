@@ -9,8 +9,8 @@ server {
 
     include /etc/nginx/includes/$SERVICE-ssl;
 
-    access_log /var/log/nginx/$SERVICE-access.log;
-    error_log /var/log/nginx/$SERVICE-error.log;
+    access_log /var/log/$SERVICE-access.log;
+    error_log /var/log/$SERVICE-error.log;
 
     location /static/ {
         alias /srv/static/;
