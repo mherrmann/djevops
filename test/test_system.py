@@ -381,6 +381,7 @@ class OnlineTest(_DjevopsTest):
         self.assertIn('The install worked', response.text)
 
     def test_getbackup_without_config(self):
+        # `getbackup` should still work without a `backup` entry in the config.
         self._configure_sqlite()
         git('push')
         deploy(QUIET)
