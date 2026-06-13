@@ -1,6 +1,7 @@
 from botocore.config import Config
 from contextlib import closing, contextmanager
 from djevops.__main__ import CommandError, init, deploy, getbackup
+from djevops.config import SQLITE_DB_FILE
 from djevops.remote.actions import MANAGE_SH
 from djevops.util import git, run_silently
 from dnsimple import Client as DNSimpleClient
@@ -402,6 +403,11 @@ class OnlineTest(_DjevopsTest):
 
         table = self.test_name
         self._upload_mock_sqlite_backup_to_s3(f"CREATE TABLE {table}(id)")
+
+        # The server is shared between tests. An earlier test may have already
+        # created the database, in which case the deploy below would skip     
+        # restoring our backup. Remove it so the restore actually runs.       
+        self._ssh(f'rm -f {SQLITE_DB_FILE}')                                  
 
         git('push')
         deploy(QUIET)
