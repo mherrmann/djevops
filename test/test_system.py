@@ -380,18 +380,18 @@ class OnlineTest(_DjevopsTest):
         self.assertIn('The install worked', response.text)
 
     def test_getbackup_without_config(self):
-        self._configure_db()
+        self._configure_sqlite()
         git('push')
         deploy(QUIET)
         self.assertGreater(
-            self._execute_against_db_backup(
+            self._execute_against_sqlite_backup(
                 "SELECT COUNT(*) FROM django_migrations"
             ),
             0
         )
 
-    def test_db_backup(self):
-        self._configure_db()
+    def test_sqlite_backup(self):
+        self._configure_sqlite()
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['db']['backup'] = \
                 self._get_litestream_config(plain_secrets=False)
@@ -401,7 +401,7 @@ class OnlineTest(_DjevopsTest):
         })
 
         table = self.test_name
-        self._upload_mock_db_backup_to_s3(f"CREATE TABLE {table}(id)")
+        self._upload_mock_sqlite_backup_to_s3(f"CREATE TABLE {table}(id)")
 
         deploy(QUIET)
 
@@ -417,13 +417,13 @@ class OnlineTest(_DjevopsTest):
 
         end_time = monotonic() + 60
         while monotonic() < end_time:
-            if self._execute_against_db_backup(count_rows) == 1:
+            if self._execute_against_sqlite_backup(count_rows) == 1:
                 break
             sleep(1)
         else:
             self.fail(f'Backup was not created')
 
-    def _configure_db(self):
+    def _configure_sqlite(self):
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['db'] = {'type': 'sqlite'}
         self.add_to_settings([
@@ -431,7 +431,7 @@ class OnlineTest(_DjevopsTest):
             "or DATABASES['default']['NAME']"
         ])
 
-    def _upload_mock_db_backup_to_s3(self, sql):
+    def _upload_mock_sqlite_backup_to_s3(self, sql):
         with TemporaryDirectory() as tmp_dir:
             db_file = Path(tmp_dir) / 'db.sqlite3'
             con = sqlite3.connect(db_file)
@@ -449,7 +449,7 @@ class OnlineTest(_DjevopsTest):
                 'litestream', 'replicate', '-once', '-config', litestream_yml
             ])
 
-    def _execute_against_db_backup(self, sql):
+    def _execute_against_sqlite_backup(self, sql):
         getbackup(QUIET, force=True)
         with closing(sqlite3.connect('db.sqlite3')) as connection:
             return connection.execute(sql).fetchone()[0]
