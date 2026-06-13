@@ -403,6 +403,7 @@ class OnlineTest(_DjevopsTest):
         table = self.test_name
         self._upload_mock_sqlite_backup_to_s3(f"CREATE TABLE {table}(id)")
 
+        git('push')
         deploy(QUIET)
 
         count_rows = f"SELECT COUNT(*) FROM {table}"
