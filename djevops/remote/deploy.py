@@ -1,11 +1,13 @@
 from datetime import datetime
+from djevops.remote.components import AptPackage, SshKey, KnownHostsEntry
 from djevops.config import get_services_users_envs, SQLITE_DB_FILE, \
     interpolate_secrets
 from djevops.litestream import get_litestream_config
 from djevops.remote.actions import install_python_deps, migrate_db, \
     collect_static_files, get_django_setting
 from djevops.remote.scaffold import get_deploy_config, get_secrets
-from djevops.util import copy_with_replace, get_apt_install_cmd, is_domain
+from djevops.remote.util import run as _run
+from djevops.util import copy_with_replace, is_domain
 from grp import getgrnam
 from os import chmod, makedirs, remove, chown, symlink
 from os.path import exists
@@ -43,40 +45,16 @@ def main():
         git_repo_url = f'https://{git_server}/{git_repo_name}.git'
 
     def install_if_not_installed(*packages):
-        to_install = [p for p in packages if not is_installed(p)]
-        if to_install:
-            log(f"Installing {', '.join(to_install)}...")
-            _run(get_apt_install_cmd(*to_install))
+        for package in packages:
+            require(AptPackage(package))
 
     install_if_not_installed('git')
 
-    if git_repo_key and not exists('/root/.ssh/id_rsa'):
+    if git_repo_key:
         git_key = secrets[git_repo_key]
-        try:
-            with open('/root/.ssh/id_rsa') as f:
-                curr_git_key = f.read()
-        except FileNotFoundError:
-            curr_git_key = None
-        if git_key != curr_git_key:
-            log('Setting up SSH keys for cloning the Git repository...')
-            makedirs('/root/.ssh', exist_ok=True)
-            with open('/root/.ssh/id_rsa', 'w') as f:
-                f.write(git_key)
-            chmod('/root/.ssh/id_rsa', 0o600)
-            _run('ssh-keygen -y -f /root/.ssh/id_rsa > /root/.ssh/id_rsa.pub')
-            chmod('/root/.ssh/id_rsa.pub', 0o644)
+        require(SshKey(git_key))
 
-    try:
-        with open('/root/.ssh/known_hosts') as f:
-            need_to_add_to_known_hosts = git_server not in f.read()
-    except FileNotFoundError:
-        need_to_add_to_known_hosts = True
-    if need_to_add_to_known_hosts:
-        log('Adding git repository server to known hosts...')
-        _run(
-            f'ssh-keyscan -H {git_server} > /root/.ssh/known_hosts 2>/dev/null'
-        )
-        chmod('/root/.ssh/known_hosts', 0o600)
+    require(KnownHostsEntry(git_server))
 
     try:
         _run('git -C /srv/app fetch origin')
@@ -436,6 +414,11 @@ def main():
 
     log('Done.')
 
+def require(component):
+    if not component.is_installed():
+        log(f'Installing {component}...')
+        component.install()
+
 def is_installed(package):
     cp = run(['dpkg', '-s', package], stdout=PIPE, stderr=STDOUT, text=True)
     if cp.returncode == 0:
@@ -481,17 +464,6 @@ def error(message):
 def _log(message, color):
     timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
     print(f'\n\033[0;32m{timestamp}\033[0m \033[0;{color}m{message}\033[0m')
-
-def _run(cmd, ignore_errors=(), env=None):
-    shell = isinstance(cmd, str)
-    try:
-        return run(
-            cmd, shell=shell, stdout=PIPE, stderr=STDOUT, text=True, check=True,
-            env=env
-        ).stdout.strip()
-    except CalledProcessError as e:
-        if e.returncode not in ignore_errors:
-            raise
 
 def _run_silently(cmd):
     return run(cmd, stdout=DEVNULL, stderr=DEVNULL)
