@@ -1,6 +1,6 @@
 from datetime import datetime
 from djevops.remote.components import AptPackage, SshKey, KnownHostsEntry, \
-    ServiceUser, VirtualEnvironment
+    SelfSignedCertificate, ServiceUser, VirtualEnvironment
 from djevops.config import get_services_users_envs, SQLITE_DB_FILE, \
     interpolate_secrets
 from djevops.litestream import get_litestream_config
@@ -161,17 +161,7 @@ def main():
 
     # Make a self-signed certificate just so we can serve SSL for requests with
     # incorrect host names.
-    self_signed_cert_privkey = '/etc/nginx/certs/default/privkey.pem'
-    if not exists(self_signed_cert_privkey):
-        log('Creating self-signed certificate...')
-        makedirs('/etc/nginx/certs/default', exist_ok=True)
-        _run([
-            'openssl', 'req', '-x509', '-nodes', '-newkey', 'rsa:2048',
-            '-keyout', self_signed_cert_privkey,
-            '-out', '/etc/nginx/certs/default/fullchain.pem',
-            '-days', '36500',
-            '-subj', '/CN=default.invalid'
-        ])
+    require(SelfSignedCertificate('/etc/nginx/certs/default', 'default.invalid'))
 
     copyfile(
         '/opt/djevops/conf/nginx/default', '/etc/nginx/sites-available/default'

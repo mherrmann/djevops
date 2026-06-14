@@ -2,7 +2,7 @@ from djevops.remote.util import chown, ensure_group_exists, \
     ensure_user_exists, run as _run, symlink_force
 from djevops.util import get_apt_install_cmd
 from os import chmod, makedirs
-from os.path import expanduser, exists
+from os.path import expanduser, exists, join
 from pwd import getpwnam
 from subprocess import PIPE, STDOUT, run, CalledProcessError
 
@@ -152,3 +152,34 @@ class ServiceUser(Component):
 
     def __str__(self):
         return f'Service user {self.user}'
+
+
+class SelfSignedCertificate(Component):
+
+    def __init__(self, directory, common_name):
+        self.directory = directory
+        self.common_name = common_name
+
+    def is_installed(self):
+        return exists(self._privkey_path)
+
+    def install(self):
+        makedirs(self.directory, exist_ok=True)
+        _run([
+            'openssl', 'req', '-x509', '-nodes', '-newkey', 'rsa:2048',
+            '-keyout', self._privkey_path,
+            '-out', self._fullchain_path,
+            '-days', '36500',
+            '-subj', f'/CN={self.common_name}'
+        ])
+
+    @property
+    def _privkey_path(self):
+        return join(self.directory, 'privkey.pem')
+
+    @property
+    def _fullchain_path(self):
+        return join(self.directory, 'fullchain.pem')
+
+    def __str__(self):
+        return f'Self-signed certificate {self._privkey_path}'
