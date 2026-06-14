@@ -1,9 +1,9 @@
 from datetime import datetime
 from djevops.remote.component_registry import ComponentRegistry
 from djevops.remote.components import AptPackage, SshKey, Crontab, Hostname, \
-    IptablesRules, KnownHostsEntry, LetsEncryptRegistration, Litestream, \
-    NginxSite, Postfix, SelfSignedCertificate, ServiceUser, TemplatedFile, \
-    VirtualEnvironment
+    IptablesRules, KnownHostsEntry, LetsEncryptCertificate, \
+    LetsEncryptRegistration, Litestream, NginxSite, Postfix, \
+    SelfSignedCertificate, ServiceUser, TemplatedFile, VirtualEnvironment
 from djevops.config import get_services_users_envs, SQLITE_DB_FILE, \
     interpolate_secrets
 from djevops.litestream import get_litestream_config
@@ -169,18 +169,7 @@ def main():
         install_if_not_installed('certbot', 'python3-certbot-nginx')
         require(LetsEncryptRegistration(admin_email))
         for service_name, domains in service_domains.items():
-            certbot_cmd = [
-                'certbot', 'certonly', '--nginx', '--cert-name', service_name,
-                '--quiet'
-            ]
-            for domain in domains:
-                certbot_cmd.extend(['-d', domain])
-            _run(certbot_cmd)
-            require(TemplatedFile(
-                f'/etc/nginx/includes/{service_name}-ssl',
-                '/opt/djevops/conf/nginx/ssl',
-                {'$SERVICE': service_name}
-            ))
+            require(LetsEncryptCertificate(service_name, domains))
 
     if config.get('mail'):
         log('Installing iptables-persistent...')

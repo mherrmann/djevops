@@ -258,6 +258,47 @@ class LetsEncryptRegistration(Component):
         return "Let's Encrypt registration"
 
 
+class LetsEncryptCertificate(Component):
+
+    def __init__(self, name, domains):
+        self.name = name
+        self.domains = domains
+
+    def install(self):
+        cmd = [
+            'certbot', 'certonly', '--nginx', '--cert-name', self.name,
+            '--quiet'
+        ]
+        for domain in self.domains:
+            cmd.extend(['-d', domain])
+        _run(cmd)
+        copy_with_replace(
+            '/opt/djevops/conf/nginx/ssl',
+            self._ssl_include_path,
+            {'$SERVICE': self.name}
+        )
+
+    def uninstall(self):
+        _run([
+            'certbot', 'delete', '--cert-name', self.name, '--non-interactive'
+        ])
+        try:
+            remove(self._ssl_include_path)
+        except FileNotFoundError:
+            pass
+
+    @property
+    def key(self):
+        return self.name
+
+    @property
+    def _ssl_include_path(self):
+        return f'/etc/nginx/includes/{self.name}-ssl'
+
+    def __str__(self):
+        return f"Let's Encrypt certificate {self.name}"
+
+
 class IptablesRules(Component):
 
     def __init__(self, accept=(), reject=()):
