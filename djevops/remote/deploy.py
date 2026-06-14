@@ -1,14 +1,14 @@
 from datetime import datetime
 from djevops.remote.components import AptPackage, SshKey, KnownHostsEntry, \
-    VirtualEnvironment
+    ServiceUser, VirtualEnvironment
 from djevops.config import get_services_users_envs, SQLITE_DB_FILE, \
     interpolate_secrets
 from djevops.litestream import get_litestream_config
 from djevops.remote.actions import install_python_deps, migrate_db, \
     collect_static_files, get_django_setting
 from djevops.remote.scaffold import get_deploy_config, get_secrets
-from djevops.remote.util import chown, ensure_group_exists, \
-    ensure_user_exists, run as _run, symlink_force
+from djevops.remote.util import chown, ensure_group_exists, run as _run, \
+    symlink_force
 from djevops.util import copy_with_replace, is_domain
 from os import chmod, makedirs, remove
 from os.path import exists
@@ -87,38 +87,14 @@ def main():
 
     log('Configuring services...')
     primary_domain = ''
-    created_users = set()
     admin_email = None
     service_domains = {}
     services_users_envs = get_services_users_envs(config, secrets)
     changed_bashrcs = set()
     services = config['services']
     for service_name, (user, env) in services_users_envs.items():
-        if user not in created_users:
-            ensure_group_exists(user)
-            ensure_user_exists(user, user)
-            _run(f'usermod -a -G {django_group} {user}')
-            home_dir = f'/home/{user}'
-            makedirs(home_dir, exist_ok=True)
-            chown(home_dir, user, user)
-            chmod(home_dir, 0o700)
-            symlink_force(
-                '/opt/djevops/conf/.bash_profile', f'{home_dir}/.bash_profile'
-            )
-            new_bashrc_contents = '\n'.join(
-                f'export {key}="{value}"' for key, value in env.items()
-            )
-            try:
-                with open(f'{home_dir}/.bashrc', 'r') as f:
-                    old_bashrc_contents = f.read()
-            except FileNotFoundError:
-                old_bashrc_contents = ''
-            if old_bashrc_contents != new_bashrc_contents:
-                changed_bashrcs.add(user)
-                with open(f'{home_dir}/.bashrc', 'w') as f:
-                    f.write(new_bashrc_contents)
-            chown(f'{home_dir}/.bashrc', user, user)
-            created_users.add(user)
+        if require(ServiceUser(user, env, django_group)):
+            changed_bashrcs.add(user)
         service = services[service_name]
         replacements = {'$SERVICE': service_name, '$USER': user}
         if service['type'] == 'django':
@@ -412,9 +388,11 @@ def main():
     log('Done.')
 
 def require(component):
-    if not component.is_installed():
-        log(f'Installing {component}...')
-        component.install()
+    if component.is_installed():
+        return False
+    log(f'Installing {component}...')
+    component.install()
+    return True
 
 def is_installed(package):
     cp = run(['dpkg', '-s', package], stdout=PIPE, stderr=STDOUT, text=True)
