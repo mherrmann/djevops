@@ -1,6 +1,6 @@
 from datetime import datetime
 from djevops.remote.components import AptPackage, SshKey, Hostname, \
-    KnownHostsEntry, LetsEncryptRegistration, Litestream, \
+    IptablesRules, KnownHostsEntry, LetsEncryptRegistration, Litestream, \
     SelfSignedCertificate, ServiceUser, VirtualEnvironment
 from djevops.config import get_services_users_envs, SQLITE_DB_FILE, \
     interpolate_secrets
@@ -189,10 +189,10 @@ def main():
         )
         install_if_not_installed('iptables-persistent')
 
-        log('Configuring iptables...')
-        _run('iptables -A INPUT -i lo -p tcp --dport 25 -j ACCEPT')
-        _run('iptables -A INPUT -p tcp --dport 25 -j REJECT')
-        _run('iptables-save > /etc/iptables/rules.v4')
+        require(IptablesRules(
+            accept=['-i lo -p tcp --dport 25'],
+            reject=['-p tcp --dport 25'],
+        ))
 
         log('Installing Postfix...')
         if primary_domain:

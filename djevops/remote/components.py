@@ -240,3 +240,24 @@ class LetsEncryptRegistration(Component):
 
     def __str__(self):
         return "Let's Encrypt registration"
+
+
+class IptablesRules(Component):
+
+    def __init__(self, accept=(), reject=()):
+        self.accept = list(accept)
+        self.reject = list(reject)
+
+    def install(self):
+        for rule in self.accept:
+            _run(f'iptables -A INPUT {rule} -j ACCEPT')
+        for rule in self.reject:
+            _run(f'iptables -A INPUT {rule} -j REJECT')
+        _run('iptables-save > /etc/iptables/rules.v4')
+
+    @property
+    def state(self):
+        return {'accept': self.accept, 'reject': self.reject}
+
+    def __str__(self):
+        return 'iptables rules'
