@@ -1,5 +1,6 @@
 from datetime import datetime
-from djevops.remote.components import AptPackage, SshKey, KnownHostsEntry
+from djevops.remote.components import AptPackage, SshKey, KnownHostsEntry, \
+    VirtualEnvironment
 from djevops.config import get_services_users_envs, SQLITE_DB_FILE, \
     interpolate_secrets
 from djevops.litestream import get_litestream_config
@@ -71,9 +72,7 @@ def main():
 
     install_if_not_installed('supervisor')
 
-    if not exists('/srv/venv'):
-        log('Creating virtual environment...')
-        _run('/root/.local/bin/uv venv /srv/venv')
+    require(VirtualEnvironment('/srv/venv'))
 
     log('Installing Python dependencies...')
     install_python_deps()

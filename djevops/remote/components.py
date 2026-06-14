@@ -1,7 +1,7 @@
 from djevops.remote.util import run as _run
 from djevops.util import get_apt_install_cmd
 from os import chmod
-from os.path import expanduser
+from os.path import expanduser, exists
 from subprocess import PIPE, STDOUT, run, CalledProcessError
 
 class Component:
@@ -85,3 +85,18 @@ class KnownHostsEntry(Component):
 
     def __str__(self):
         return f'Known hosts entry for {self.host}'
+
+
+class VirtualEnvironment(Component):
+
+    def __init__(self, path):
+        self.path = path
+
+    def is_installed(self):
+        return exists(self.path)
+
+    def install(self):
+        _run(f'/root/.local/bin/uv venv {self.path}')
+
+    def __str__(self):
+        return f'Virtual environment {self.path}'
