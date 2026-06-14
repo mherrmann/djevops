@@ -1,7 +1,7 @@
 from datetime import datetime
 from djevops.remote.components import AptPackage, SshKey, Hostname, \
     IptablesRules, KnownHostsEntry, LetsEncryptRegistration, Litestream, \
-    SelfSignedCertificate, ServiceUser, VirtualEnvironment
+    Postfix, SelfSignedCertificate, ServiceUser, VirtualEnvironment
 from djevops.config import get_services_users_envs, SQLITE_DB_FILE, \
     interpolate_secrets
 from djevops.litestream import get_litestream_config
@@ -207,46 +207,13 @@ def main():
             'libsasl2-modules'
         )
 
-        log('Configuring Postfix...')
         hostname = primary_domain or _run('hostname')
-        with open('/etc/mailname', 'w') as f:
-            f.write(hostname + '\n')
-        chown('/etc/mailname', 'postfix')
-        smtp_host = config['mail']['host']
-        copy_with_replace(
-            '/opt/djevops/conf/postfix/main.cf',
-            '/etc/postfix/main.cf',
-            {
-                '$HOST_NAME': hostname,
-                '$SMTP_HOST': smtp_host,
-            }
-        )
-        copy_with_replace(
-            '/opt/djevops/conf/postfix/sasl_passwd',
-            '/etc/postfix/sasl_passwd',
-            {
-                '$SMTP_HOST': config['mail']['host'],
-                '$SMTP_USER': secrets[config['mail']['user']],
-                '$SMTP_PASSWORD': secrets[config['mail']['password']],
-            }
-        )
-        chown('/etc/postfix', 'postfix')
-        try:
-            remove('/etc/postfix/sasl_passwd.db')
-        except FileNotFoundError:
-            pass
-        _run('postmap /etc/postfix/sasl_passwd')
-        chmod('/etc/postfix/sasl_passwd', 0o400)
-        chown('/etc/postfix/sasl_passwd', 'postfix')
-        _run(
-            'envsubst < /opt/djevops/conf/postfix/generic > '
-            '/etc/postfix/generic'
-        )
-        if exists('/etc/postfix/generic.db'):
-            remove('/etc/postfix/generic.db')
-        _run('postmap /etc/postfix/generic')
-        chown('/etc/postfix/generic', 'postfix')
-        _run('/etc/init.d/postfix reload')
+        require(Postfix(
+            hostname,
+            config['mail']['host'],
+            secrets[config['mail']['user']],
+            secrets[config['mail']['password']],
+        ))
 
     if 'redis' in config:
         install_if_not_installed('redis-server')

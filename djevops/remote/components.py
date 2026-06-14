@@ -1,6 +1,6 @@
 from djevops.remote.util import chown, ensure_group_exists, \
     ensure_user_exists, run as _run, symlink_force
-from djevops.util import get_apt_install_cmd
+from djevops.util import copy_with_replace, get_apt_install_cmd
 from os import chmod, makedirs, remove
 from os.path import exists, expanduser, join
 from urllib.request import urlretrieve
@@ -261,3 +261,63 @@ class IptablesRules(Component):
 
     def __str__(self):
         return 'iptables rules'
+
+
+class Postfix(Component):
+
+    def __init__(self, hostname, smtp_host, smtp_user, smtp_password):
+        self.hostname = hostname
+        self.smtp_host = smtp_host
+        self.smtp_user = smtp_user
+        self.smtp_password = smtp_password
+
+    def install(self):
+        with open('/etc/mailname', 'w') as f:
+            f.write(self.hostname + '\n')
+        chown('/etc/mailname', 'postfix')
+        copy_with_replace(
+            '/opt/djevops/conf/postfix/main.cf',
+            '/etc/postfix/main.cf',
+            {
+                '$HOST_NAME': self.hostname,
+                '$SMTP_HOST': self.smtp_host,
+            }
+        )
+        copy_with_replace(
+            '/opt/djevops/conf/postfix/sasl_passwd',
+            '/etc/postfix/sasl_passwd',
+            {
+                '$SMTP_HOST': self.smtp_host,
+                '$SMTP_USER': self.smtp_user,
+                '$SMTP_PASSWORD': self.smtp_password,
+            }
+        )
+        chown('/etc/postfix', 'postfix')
+        try:
+            remove('/etc/postfix/sasl_passwd.db')
+        except FileNotFoundError:
+            pass
+        _run('postmap /etc/postfix/sasl_passwd')
+        chmod('/etc/postfix/sasl_passwd', 0o400)
+        chown('/etc/postfix/sasl_passwd', 'postfix')
+        _run(
+            'envsubst < /opt/djevops/conf/postfix/generic > '
+            '/etc/postfix/generic'
+        )
+        if exists('/etc/postfix/generic.db'):
+            remove('/etc/postfix/generic.db')
+        _run('postmap /etc/postfix/generic')
+        chown('/etc/postfix/generic', 'postfix')
+        _run('/etc/init.d/postfix reload')
+
+    @property
+    def state(self):
+        return {
+            'hostname': self.hostname,
+            'smtp_host': self.smtp_host,
+            'smtp_user': self.smtp_user,
+            'smtp_password': self.smtp_password,
+        }
+
+    def __str__(self):
+        return 'Postfix'
