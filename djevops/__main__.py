@@ -3,6 +3,7 @@ from djevops import GIT_HINT
 from djevops.config import get_services_users_envs, get_django_service, \
     interpolate_secrets, SQLITE_DB_FILE
 from djevops.litestream import get_litestream_config
+from djevops.remote.scaffold import STATE_DIR, DEPLOY_CONFIG_PATH, SECRETS_PATH
 from djevops.util import git, get_apt_install_cmd, prompt_yes_no, \
     run_in_django_shell, run_silently
 from functools import partial
@@ -128,13 +129,14 @@ def deploy(quiet=False, dry_run=False):
 
     server = config['server']
     install_djevops_on_server('root', server, quiet)
-    rsync('-a', 'deploy/djevops.yml', f'root@{server}:/root/deploy.yml')
+    ssh('root', server, f'mkdir -p {STATE_DIR}', quiet)
+    rsync('-a', 'deploy/djevops.yml', f'root@{server}:{DEPLOY_CONFIG_PATH}')
 
     secrets_json = NamedTemporaryFile(mode='w', delete=False, suffix='.json')
     json.dump(secrets, secrets_json, indent=2, sort_keys=True)
     secrets_json.close()
     try:
-        rsync('-a', secrets_json.name, f'root@{server}:/root/secrets.json')
+        rsync('-a', secrets_json.name, f'root@{server}:{SECRETS_PATH}')
     finally:
         remove(secrets_json.name)
 
