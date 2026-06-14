@@ -7,12 +7,10 @@ from djevops.litestream import get_litestream_config
 from djevops.remote.actions import install_python_deps, migrate_db, \
     collect_static_files, get_django_setting
 from djevops.remote.scaffold import get_deploy_config, get_secrets
-from djevops.remote.util import run as _run
+from djevops.remote.util import chown, run as _run
 from djevops.util import copy_with_replace, is_domain
-from grp import getgrnam
-from os import chmod, makedirs, remove, chown, symlink
+from os import chmod, makedirs, remove, symlink
 from os.path import exists
-from pwd import getpwnam
 from random import randint
 from shlex import quote
 from shutil import rmtree, copyfile, which
@@ -84,7 +82,7 @@ def main():
     django_group = 'django'
     ensure_group_exists(django_group)
     makedirs('/var/lib/djevops', exist_ok=True)
-    _chown('/var/lib/djevops', group_name=django_group)
+    chown('/var/lib/djevops', group_name=django_group)
     chmod('/var/lib/djevops', 0o770)
 
     log('Configuring services...')
@@ -102,7 +100,7 @@ def main():
             _run(f'usermod -a -G {django_group} {user}')
             home_dir = f'/home/{user}'
             makedirs(home_dir, exist_ok=True)
-            _chown(home_dir, user, user)
+            chown(home_dir, user, user)
             chmod(home_dir, 0o700)
             symlink_force(
                 '/opt/djevops/conf/.bash_profile', f'{home_dir}/.bash_profile'
@@ -119,7 +117,7 @@ def main():
                 changed_bashrcs.add(user)
                 with open(f'{home_dir}/.bashrc', 'w') as f:
                     f.write(new_bashrc_contents)
-            _chown(f'{home_dir}/.bashrc', user, user)
+            chown(f'{home_dir}/.bashrc', user, user)
             created_users.add(user)
         service = services[service_name]
         replacements = {'$SERVICE': service_name, '$USER': user}
@@ -264,7 +262,7 @@ def main():
         hostname = primary_domain or _run('hostname')
         with open('/etc/mailname', 'w') as f:
             f.write(hostname + '\n')
-        _chown('/etc/mailname', 'postfix')
+        chown('/etc/mailname', 'postfix')
         smtp_host = config['mail']['host']
         copy_with_replace(
             '/opt/djevops/conf/postfix/main.cf',
@@ -283,14 +281,14 @@ def main():
                 '$SMTP_PASSWORD': secrets[config['mail']['password']],
             }
         )
-        _chown('/etc/postfix', 'postfix')
+        chown('/etc/postfix', 'postfix')
         try:
             remove('/etc/postfix/sasl_passwd.db')
         except FileNotFoundError:
             pass
         _run('postmap /etc/postfix/sasl_passwd')
         chmod('/etc/postfix/sasl_passwd', 0o400)
-        _chown('/etc/postfix/sasl_passwd', 'postfix')
+        chown('/etc/postfix/sasl_passwd', 'postfix')
         _run(
             'envsubst < /opt/djevops/conf/postfix/generic > '
             '/etc/postfix/generic'
@@ -298,7 +296,7 @@ def main():
         if exists('/etc/postfix/generic.db'):
             remove('/etc/postfix/generic.db')
         _run('postmap /etc/postfix/generic')
-        _chown('/etc/postfix/generic', 'postfix')
+        chown('/etc/postfix/generic', 'postfix')
         _run('/etc/init.d/postfix reload')
 
     if 'redis' in config:
@@ -326,7 +324,7 @@ def main():
                 _run(['litestream', 'restore', SQLITE_DB_FILE])
         log('Migrating database...')
         migrate_db()
-        _chown(SQLITE_DB_FILE, group_name=django_group)
+        chown(SQLITE_DB_FILE, group_name=django_group)
         chmod(SQLITE_DB_FILE, 0o660)
         if backup:
             # Do this after migrating the database and chowning the file in
@@ -437,11 +435,6 @@ def ensure_user_exists(user_name, group_name):
         'useradd', '--system', '--gid', group_name, '--shell', '/bin/bash',
         user_name
     ], ignore_errors=(ERROR_ALREADY_EXISTS,))
-
-def _chown(path, user_name=None, group_name=None):
-    uid = -1 if user_name is None else getpwnam(user_name).pw_uid
-    gid = -1 if group_name is None else getgrnam(group_name).gr_gid
-    chown(path, uid, gid)
 
 def symlink_force(source, link_name):
     try:
