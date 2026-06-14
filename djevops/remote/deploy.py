@@ -7,9 +7,9 @@ from djevops.litestream import get_litestream_config
 from djevops.remote.actions import install_python_deps, migrate_db, \
     collect_static_files, get_django_setting
 from djevops.remote.scaffold import get_deploy_config, get_secrets
-from djevops.remote.util import chown, run as _run
+from djevops.remote.util import chown, run as _run, symlink_force
 from djevops.util import copy_with_replace, is_domain
-from os import chmod, makedirs, remove, symlink
+from os import chmod, makedirs, remove
 from os.path import exists
 from random import randint
 from shlex import quote
@@ -435,13 +435,6 @@ def ensure_user_exists(user_name, group_name):
         'useradd', '--system', '--gid', group_name, '--shell', '/bin/bash',
         user_name
     ], ignore_errors=(ERROR_ALREADY_EXISTS,))
-
-def symlink_force(source, link_name):
-    try:
-        symlink(source, link_name)
-    except FileExistsError:
-        remove(link_name)
-        symlink(source, link_name)
 
 def debconf_set_selections(value):
     run(['debconf-set-selections'], input=value + '\n', text=True, check=True)
