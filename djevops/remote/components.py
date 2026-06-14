@@ -208,3 +208,18 @@ class Litestream(Component):
 
     def __str__(self):
         return f'Litestream {self.VERSION}'
+
+
+class Hostname(Component):
+
+    def __init__(self, name):
+        self.name = name
+
+    def is_installed(self):
+        return _run('hostname') == self.name
+
+    def install(self):
+        _run(['hostnamectl', 'set-hostname', self.name])
+
+    def __str__(self):
+        return f'Hostname {self.name}'

@@ -1,6 +1,7 @@
 from datetime import datetime
-from djevops.remote.components import AptPackage, SshKey, KnownHostsEntry, \
-    Litestream, SelfSignedCertificate, ServiceUser, VirtualEnvironment
+from djevops.remote.components import AptPackage, SshKey, Hostname, \
+    KnownHostsEntry, Litestream, SelfSignedCertificate, ServiceUser, \
+    VirtualEnvironment
 from djevops.config import get_services_users_envs, SQLITE_DB_FILE, \
     interpolate_secrets
 from djevops.litestream import get_litestream_config
@@ -99,11 +100,7 @@ def main():
                 for host in get_django_setting('ALLOWED_HOSTS', env):
                     if is_domain(host):
                         primary_domain = host
-                        if _run('hostname') != primary_domain:
-                            log('Setting hostname...')
-                            _run([
-                                'hostnamectl', 'set-hostname', primary_domain
-                            ])
+                        require(Hostname(primary_domain))
                         break
             if not admin_email:
                 admins = get_django_setting('ADMINS', env)
