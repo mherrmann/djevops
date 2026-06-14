@@ -1,3 +1,0 @@
-MAILTO=$ADMIN_EMAIL
-@reboot /opt/djevops/bin/init-run-dir.sh
-26 2 */7 * * cronic certbot renew

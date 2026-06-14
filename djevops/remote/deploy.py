@@ -14,7 +14,6 @@ from djevops.remote.util import chown, ensure_group_exists, run as _run, \
 from djevops.util import copy_with_replace, is_domain
 from os import chmod, makedirs, remove
 from os.path import exists
-from random import randint
 from shlex import quote
 from shutil import rmtree, copyfile
 from subprocess import run, CalledProcessError, DEVNULL
@@ -301,14 +300,10 @@ def main():
     log(f'The server is now serving requests at {server_url}!')
 
     log('Setting up crontab...')
-    symlink_force('/opt/djevops/bin/cronic', '/usr/bin/cronic')
     with open('crontab', 'w') as f:
         if admin_email:
             f.write(f'MAILTO={admin_email}\n')
         f.write('@reboot /opt/djevops/bin/init-run-dir.sh\n')
-        minute = randint(0, 59)
-        hour = randint(0, 23)
-        f.write(f'{minute} {hour} */7 * * cronic certbot renew\n')
     _run('crontab crontab')
     remove('crontab')
 
