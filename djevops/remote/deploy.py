@@ -384,14 +384,6 @@ def require(component):
     component.install()
     return True
 
-def is_installed(package):
-    cp = run(['dpkg', '-s', package], stdout=PIPE, stderr=STDOUT, text=True)
-    if cp.returncode == 0:
-        return True
-    elif cp.returncode == 1 and 'is not installed' in cp.stdout:
-        return False
-    raise CalledProcessError(cp.returncode, cp.args, cp.stdout)
-
 def debconf_set_selections(value):
     run(['debconf-set-selections'], input=value + '\n', text=True, check=True)
 
