@@ -3,6 +3,7 @@ from djevops.remote.util import chown, ensure_group_exists, \
 from djevops.util import copy_with_replace, get_apt_install_cmd
 from os import chmod, makedirs, remove
 from os.path import exists, expanduser, join
+from shutil import rmtree
 from urllib.request import urlretrieve
 
 class Component:
@@ -12,10 +13,13 @@ class Component:
         return None
 
     @property
-    def state(self):
-        return None
+    def args(self):
+        return self.__dict__
 
     def install(self):
+        raise NotImplementedError
+
+    def uninstall(self):
         raise NotImplementedError
 
 
@@ -26,6 +30,9 @@ class AptPackage(Component):
 
     def install(self):
         _run(get_apt_install_cmd(self.name))
+
+    def uninstall(self):
+        _run(f'apt-get purge -yqq {self.name}')
 
     @property
     def key(self):
@@ -47,9 +54,12 @@ class SshKey(Component):
         _run(f"ssh-keygen -y -f {self._path} > {self._path}.pub")
         chmod(f'{self._path}.pub', 0o644)
 
-    @property
-    def state(self):
-        return self.contents
+    def uninstall(self):
+        for path in (self._path, f'{self._path}.pub'):
+            try:
+                remove(path)
+            except FileNotFoundError:
+                pass
 
     @property
     def _path(self):
@@ -67,6 +77,9 @@ class KnownHostsEntry(Component):
     def install(self):
         _run(f"ssh-keyscan -H {self.host} >> {self._path} 2>/dev/null")
         chmod(self._path, 0o600)
+
+    def uninstall(self):
+        _run(f'ssh-keygen -R {self.host} -f {self._path} 2>/dev/null')
 
     @property
     def key(self):
@@ -87,6 +100,9 @@ class VirtualEnvironment(Component):
 
     def install(self):
         _run(f'uv venv {self.path}')
+
+    def uninstall(self):
+        rmtree(self.path, ignore_errors=True)
 
     @property
     def key(self):
@@ -117,13 +133,13 @@ class ServiceUser(Component):
             f.write(self._bashrc_contents)
         chown(self._bashrc_path, self.user, self.user)
 
+    def uninstall(self):
+        _run(['userdel', '-r', self.user], ignore_errors=(6, 8, 12))
+        _run(['groupdel', self.user], ignore_errors=(6, 8))
+
     @property
     def key(self):
         return self.user
-
-    @property
-    def state(self):
-        return {'env': self.env, 'group': self.group}
 
     @property
     def _home_dir(self):
@@ -159,13 +175,12 @@ class SelfSignedCertificate(Component):
             '-subj', f'/CN={self.common_name}'
         ])
 
+    def uninstall(self):
+        rmtree(self.directory, ignore_errors=True)
+
     @property
     def key(self):
         return self.directory
-
-    @property
-    def state(self):
-        return self.common_name
 
     @property
     def _privkey_path(self):
@@ -188,6 +203,9 @@ class Litestream(Component):
         _run(['dpkg', '-i', deb_path])
         remove(deb_path)
 
+    def uninstall(self):
+        _run('apt-get purge -yqq litestream')
+
     @property
     def _deb_url(self):
         return (
@@ -207,9 +225,8 @@ class Hostname(Component):
     def install(self):
         _run(['hostnamectl', 'set-hostname', self.name])
 
-    @property
-    def state(self):
-        return self.name
+    def uninstall(self):
+        pass
 
     def __str__(self):
         return f'Hostname {self.name}'
@@ -234,9 +251,8 @@ class LetsEncryptRegistration(Component):
                 cmd.append('--register-unsafely-without-email')
         _run(cmd)
 
-    @property
-    def state(self):
-        return self.email
+    def uninstall(self):
+        rmtree(self.ACCOUNTS_DIR, ignore_errors=True)
 
     def __str__(self):
         return "Let's Encrypt registration"
@@ -255,9 +271,12 @@ class IptablesRules(Component):
             _run(f'iptables -A INPUT {rule} -j REJECT')
         _run('iptables-save > /etc/iptables/rules.v4')
 
-    @property
-    def state(self):
-        return {'accept': self.accept, 'reject': self.reject}
+    def uninstall(self):
+        for rule in self.accept:
+            _run(f'iptables -D INPUT {rule} -j ACCEPT', ignore_errors=(1,))
+        for rule in self.reject:
+            _run(f'iptables -D INPUT {rule} -j REJECT', ignore_errors=(1,))
+        _run('iptables-save > /etc/iptables/rules.v4')
 
     def __str__(self):
         return 'iptables rules'
@@ -310,14 +329,18 @@ class Postfix(Component):
         chown('/etc/postfix/generic', 'postfix')
         _run('/etc/init.d/postfix reload')
 
-    @property
-    def state(self):
-        return {
-            'hostname': self.hostname,
-            'smtp_host': self.smtp_host,
-            'smtp_user': self.smtp_user,
-            'smtp_password': self.smtp_password,
-        }
+    def uninstall(self):
+        for path in (
+            '/etc/mailname',
+            '/etc/postfix/sasl_passwd',
+            '/etc/postfix/sasl_passwd.db',
+            '/etc/postfix/generic',
+            '/etc/postfix/generic.db',
+        ):
+            try:
+                remove(path)
+            except FileNotFoundError:
+                pass
 
     def __str__(self):
         return 'Postfix'
@@ -339,9 +362,8 @@ class Crontab(Component):
         _run('crontab crontab')
         remove('crontab')
 
-    @property
-    def state(self):
-        return {'jobs': self.jobs, 'mailto': self.mailto}
+    def uninstall(self):
+        _run(['crontab', '-r'], ignore_errors=(1,))
 
     def __str__(self):
         return 'crontab'

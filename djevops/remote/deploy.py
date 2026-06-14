@@ -1,4 +1,5 @@
 from datetime import datetime
+from djevops.remote.component_registry import ComponentRegistry
 from djevops.remote.components import AptPackage, SshKey, Crontab, Hostname, \
     IptablesRules, KnownHostsEntry, LetsEncryptRegistration, Litestream, \
     Postfix, SelfSignedCertificate, ServiceUser, VirtualEnvironment
@@ -7,8 +8,7 @@ from djevops.config import get_services_users_envs, SQLITE_DB_FILE, \
 from djevops.litestream import get_litestream_config
 from djevops.remote.actions import install_python_deps, migrate_db, \
     collect_static_files, get_django_setting
-from djevops.remote.scaffold import get_deploy_config, get_secrets, \
-    load_components, save_components
+from djevops.remote.scaffold import get_deploy_config, get_secrets
 from djevops.remote.util import chown, ensure_group_exists, run as _run, \
     symlink_force
 from djevops.util import copy_with_replace, is_domain
@@ -28,6 +28,9 @@ TERMINAL_COLOR_ERROR = 91
 def main():
     config = get_deploy_config()
     secrets = get_secrets()
+
+    registry = ComponentRegistry(log)
+    require = registry.require
 
     server_ip = config['server']
 
@@ -309,20 +312,9 @@ def main():
         f.write('APT::Periodic::Update-Package-Lists "1";\n')
         f.write('APT::Periodic::Unattended-Upgrade "1";\n')
 
-    log('Done.')
+    registry.uninstall_unused()
 
-def require(component):
-    key = type(component).__name__
-    if component.key is not None:
-        key += f':{component.key}'
-    components = load_components()
-    if key in components and components[key] == component.state:
-        return False
-    log(f'Installing {component}...')
-    component.install()
-    components[key] = component.state
-    save_components(components)
-    return True
+    log('Done.')
 
 def debconf_set_selections(value):
     run(['debconf-set-selections'], input=value + '\n', text=True, check=True)

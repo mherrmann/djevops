@@ -25,4 +25,4 @@ def load_components():
 
 def save_components(components):
     with open(COMPONENTS_PATH, 'w') as f:
-        json.dump(components, f, indent=2, sort_keys=True)
+        json.dump(components, f, indent=2)
