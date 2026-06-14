@@ -367,3 +367,61 @@ class Crontab(Component):
 
     def __str__(self):
         return 'crontab'
+
+
+class NginxSite(Component):
+
+    def __init__(self, name, source, replacements):
+        self.name = name
+        self.source = source
+        self.replacements = replacements
+
+    def install(self):
+        copy_with_replace(self.source, self._available_path, self.replacements)
+        symlink_force(self._available_path, self._enabled_path)
+
+    def uninstall(self):
+        for path in (self._enabled_path, self._available_path):
+            try:
+                remove(path)
+            except FileNotFoundError:
+                pass
+
+    @property
+    def key(self):
+        return self.name
+
+    @property
+    def _available_path(self):
+        return f'/etc/nginx/sites-available/{self.name}'
+
+    @property
+    def _enabled_path(self):
+        return f'/etc/nginx/sites-enabled/{self.name}'
+
+    def __str__(self):
+        return f'nginx site {self.name}'
+
+
+class TemplatedFile(Component):
+
+    def __init__(self, target, source, replacements):
+        self.target = target
+        self.source = source
+        self.replacements = replacements
+
+    def install(self):
+        copy_with_replace(self.source, self.target, self.replacements)
+
+    def uninstall(self):
+        try:
+            remove(self.target)
+        except FileNotFoundError:
+            pass
+
+    @property
+    def key(self):
+        return self.target
+
+    def __str__(self):
+        return self.target

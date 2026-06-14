@@ -21,6 +21,7 @@ class ComponentRegistry:
 
     def uninstall_unused(self):
         components = load_components()
+        uninstalled = []
         for key in reversed(list(components)):
             if key in self._required:
                 continue
@@ -28,9 +29,11 @@ class ComponentRegistry:
             self._log(f'Uninstalling {component}...')
             component.uninstall()
             del components[key]
+            uninstalled.append(component)
             # Persist after each removal so an aborted run doesn't leave the
             # file claiming an already-uninstalled component is still present.
             save_components(components)
+        return uninstalled
 
 def _get_full_key(component):
     result = type(component).__name__

@@ -2,7 +2,8 @@ from datetime import datetime
 from djevops.remote.component_registry import ComponentRegistry
 from djevops.remote.components import AptPackage, SshKey, Crontab, Hostname, \
     IptablesRules, KnownHostsEntry, LetsEncryptRegistration, Litestream, \
-    Postfix, SelfSignedCertificate, ServiceUser, VirtualEnvironment
+    NginxSite, Postfix, SelfSignedCertificate, ServiceUser, TemplatedFile, \
+    VirtualEnvironment
 from djevops.config import get_services_users_envs, SQLITE_DB_FILE, \
     interpolate_secrets
 from djevops.litestream import get_litestream_config
@@ -11,7 +12,7 @@ from djevops.remote.actions import install_python_deps, migrate_db, \
 from djevops.remote.scaffold import get_deploy_config, get_secrets
 from djevops.remote.util import chown, ensure_group_exists, run as _run, \
     symlink_force
-from djevops.util import copy_with_replace, is_domain
+from djevops.util import is_domain
 from os import chmod, makedirs
 from os.path import exists
 from shlex import quote
@@ -112,28 +113,28 @@ def main():
                     if not isinstance(admin_email, str):
                         admin_email = admin_email[1]
             supervisor_conf_file = 'gunicorn.conf'
-            nginx_available_file = '/etc/nginx/sites-available/' + service_name
             domains = [
                 host for host in get_django_setting('ALLOWED_HOSTS', env)
                 if is_domain(host)
             ]
-            copy_with_replace(
-                '/opt/djevops/conf/nginx/django', nginx_available_file,
+            require(NginxSite(
+                service_name,
+                '/opt/djevops/conf/nginx/django',
                 {
                     '$SERVER_NAME': ' '.join(domains) or server_ip,
                     '$SERVICE': service_name,
                 }
-            )
-            # Placeholder until Certbot runs:
-            open(f'/etc/nginx/includes/{service_name}-ssl', 'w').close()
-            symlink_force(
-                nginx_available_file, '/etc/nginx/sites-enabled/' + service_name
-            )
-            copy_with_replace(
-                '/opt/djevops/conf/logrotate/nginx',
+            ))
+            # Placeholder until Certbot runs. Create it only if absent so we
+            # don't clobber the ssl config Certbot's TemplatedFile writes below.
+            ssl_include = f'/etc/nginx/includes/{service_name}-ssl'
+            if not exists(ssl_include):
+                open(ssl_include, 'w').close()
+            require(TemplatedFile(
                 f'/etc/logrotate.d/{service_name}-nginx',
+                '/opt/djevops/conf/logrotate/nginx',
                 {'$SERVICE': service_name}
-            )
+            ))
             if domains:
                 service_domains[service_name] = domains[:]
         elif service['type'] in ('celery', 'command'):
@@ -145,16 +146,16 @@ def main():
             replacements['$COMMAND'] = quote(command)
         else:
             error(f"Unknown service type: {service['type']}")
-        copy_with_replace(
-            f'/opt/djevops/conf/supervisor/{supervisor_conf_file}',
+        require(TemplatedFile(
             f'/etc/supervisor/conf.d/{service_name}.conf',
+            f'/opt/djevops/conf/supervisor/{supervisor_conf_file}',
             replacements
-        )
-        copy_with_replace(
-            '/opt/djevops/conf/logrotate/service',
+        ))
+        require(TemplatedFile(
             f'/etc/logrotate.d/{service_name}',
+            '/opt/djevops/conf/logrotate/service',
             replacements
-        )
+        ))
 
     # Make a self-signed certificate just so we can serve SSL for requests with
     # incorrect host names.
@@ -175,11 +176,11 @@ def main():
             for domain in domains:
                 certbot_cmd.extend(['-d', domain])
             _run(certbot_cmd)
-            copy_with_replace(
-                '/opt/djevops/conf/nginx/ssl',
+            require(TemplatedFile(
                 f'/etc/nginx/includes/{service_name}-ssl',
+                '/opt/djevops/conf/nginx/ssl',
                 {'$SERVICE': service_name}
-            )
+            ))
 
     if config.get('mail'):
         log('Installing iptables-persistent...')
@@ -312,7 +313,9 @@ def main():
         f.write('APT::Periodic::Update-Package-Lists "1";\n')
         f.write('APT::Periodic::Unattended-Upgrade "1";\n')
 
-    registry.uninstall_unused()
+    if registry.uninstall_unused():
+        _run('supervisorctl update')
+        _run('nginx -s reload')
 
     log('Done.')
 
