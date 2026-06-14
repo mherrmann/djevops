@@ -6,6 +6,8 @@ from subprocess import PIPE, STDOUT, CalledProcessError
 import os
 import subprocess
 
+_ERROR_ALREADY_EXISTS = 9
+
 def run(cmd, ignore_errors=(), env=None):
     shell = isinstance(cmd, str)
     try:
@@ -28,3 +30,15 @@ def symlink_force(source, link_name):
     except FileExistsError:
         remove(link_name)
         symlink(source, link_name)
+
+def ensure_group_exists(group_name):
+    run(
+        ['groupadd', '--system', group_name],
+        ignore_errors=(_ERROR_ALREADY_EXISTS,)
+    )
+
+def ensure_user_exists(user_name, group_name):
+    run([
+        'useradd', '--system', '--gid', group_name, '--shell', '/bin/bash',
+        user_name
+    ], ignore_errors=(_ERROR_ALREADY_EXISTS,))

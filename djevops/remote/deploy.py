@@ -7,7 +7,8 @@ from djevops.litestream import get_litestream_config
 from djevops.remote.actions import install_python_deps, migrate_db, \
     collect_static_files, get_django_setting
 from djevops.remote.scaffold import get_deploy_config, get_secrets
-from djevops.remote.util import chown, run as _run, symlink_force
+from djevops.remote.util import chown, ensure_group_exists, \
+    ensure_user_exists, run as _run, symlink_force
 from djevops.util import copy_with_replace, is_domain
 from os import chmod, makedirs, remove
 from os.path import exists
@@ -21,7 +22,6 @@ from urllib.request import urlretrieve
 import sys
 import yaml
 
-ERROR_ALREADY_EXISTS = 9
 TERMINAL_COLOR_SUCCESS = 93
 TERMINAL_COLOR_ERROR = 91
 
@@ -423,18 +423,6 @@ def is_installed(package):
     elif cp.returncode == 1 and 'is not installed' in cp.stdout:
         return False
     raise CalledProcessError(cp.returncode, cp.args, cp.stdout)
-
-def ensure_group_exists(group_name):
-    _run(
-        ['groupadd', '--system', group_name],
-        ignore_errors=(ERROR_ALREADY_EXISTS,)
-    )
-
-def ensure_user_exists(user_name, group_name):
-    _run([
-        'useradd', '--system', '--gid', group_name, '--shell', '/bin/bash',
-        user_name
-    ], ignore_errors=(ERROR_ALREADY_EXISTS,))
 
 def debconf_set_selections(value):
     run(['debconf-set-selections'], input=value + '\n', text=True, check=True)
