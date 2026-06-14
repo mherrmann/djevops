@@ -321,3 +321,27 @@ class Postfix(Component):
 
     def __str__(self):
         return 'Postfix'
+
+
+class Crontab(Component):
+
+    def __init__(self, jobs, mailto=''):
+        self.jobs = list(jobs)
+        self.mailto = mailto
+
+    def install(self):
+        lines = []
+        if self.mailto:
+            lines.append(f'MAILTO={self.mailto}')
+        lines.extend(self.jobs)
+        with open('crontab', 'w') as f:
+            f.write('\n'.join(lines) + '\n')
+        _run('crontab crontab')
+        remove('crontab')
+
+    @property
+    def state(self):
+        return {'jobs': self.jobs, 'mailto': self.mailto}
+
+    def __str__(self):
+        return 'crontab'

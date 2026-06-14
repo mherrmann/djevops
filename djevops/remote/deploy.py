@@ -1,5 +1,5 @@
 from datetime import datetime
-from djevops.remote.components import AptPackage, SshKey, Hostname, \
+from djevops.remote.components import AptPackage, SshKey, Crontab, Hostname, \
     IptablesRules, KnownHostsEntry, LetsEncryptRegistration, Litestream, \
     Postfix, SelfSignedCertificate, ServiceUser, VirtualEnvironment
 from djevops.config import get_services_users_envs, SQLITE_DB_FILE, \
@@ -12,7 +12,7 @@ from djevops.remote.scaffold import get_deploy_config, get_secrets, \
 from djevops.remote.util import chown, ensure_group_exists, run as _run, \
     symlink_force
 from djevops.util import copy_with_replace, is_domain
-from os import chmod, makedirs, remove
+from os import chmod, makedirs
 from os.path import exists
 from shlex import quote
 from shutil import rmtree, copyfile
@@ -299,13 +299,10 @@ def main():
         else f'http://{server_ip}'
     log(f'The server is now serving requests at {server_url}!')
 
-    log('Setting up crontab...')
-    with open('crontab', 'w') as f:
-        if admin_email:
-            f.write(f'MAILTO={admin_email}\n')
-        f.write('@reboot /opt/djevops/bin/init-run-dir.sh\n')
-    _run('crontab crontab')
-    remove('crontab')
+    require(Crontab(
+        ['@reboot /opt/djevops/bin/init-run-dir.sh'],
+        mailto=admin_email,
+    ))
 
     install_if_not_installed('unattended-upgrades')
     with open('/etc/apt/apt.conf.d/20auto-upgrades', 'w') as f:
