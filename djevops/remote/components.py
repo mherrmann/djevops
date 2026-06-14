@@ -96,7 +96,7 @@ class VirtualEnvironment(Component):
         return exists(self.path)
 
     def install(self):
-        _run(f'/root/.local/bin/uv venv {self.path}')
+        _run(f'uv venv {self.path}')
 
     def __str__(self):
         return f'Virtual environment {self.path}'

@@ -9,7 +9,7 @@ MANAGE_SH = '/opt/djevops/bin/manage.sh'
 def install_python_deps():
     run_silently(
         'cd /srv/app && UV_PROJECT_ENVIRONMENT=/srv/venv '
-        '/root/.local/bin/uv sync -q --no-install-project',
+        'uv sync -q --no-install-project',
         shell=True
     )
 

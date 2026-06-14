@@ -239,7 +239,8 @@ def install_djevops_on_server(user, host, quiet):
     ssh_(get_apt_install_cmd('rsync'))
     ssh_(
         'command -v uv >/dev/null 2>&1 || '
-        'curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1'
+        'curl -LsSf https://astral.sh/uv/install.sh | '
+        'env UV_INSTALL_DIR=/usr/local/bin sh >/dev/null 2>&1'
     )
     rsync(
         '-raL',
@@ -253,7 +254,7 @@ def install_djevops_on_server(user, host, quiet):
         'ln -sf /opt/djevops/pyproject.toml /opt/pyproject.toml && '
         'ln -sf /opt/djevops/uv.lock /opt/uv.lock && '
         'cd /opt && '
-        'UV_PROJECT_ENVIRONMENT=/opt/djevops/.venv ~/.local/bin/uv sync -q && '
+        'UV_PROJECT_ENVIRONMENT=/opt/djevops/.venv uv sync -q && '
         'rm /opt/pyproject.toml /opt/uv.lock'
     )
 
