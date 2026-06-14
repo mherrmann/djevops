@@ -1,7 +1,7 @@
 from datetime import datetime
 from djevops.remote.components import AptPackage, SshKey, Hostname, \
-    KnownHostsEntry, Litestream, SelfSignedCertificate, ServiceUser, \
-    VirtualEnvironment
+    KnownHostsEntry, LetsEncryptRegistration, Litestream, \
+    SelfSignedCertificate, ServiceUser, VirtualEnvironment
 from djevops.config import get_services_users_envs, SQLITE_DB_FILE, \
     interpolate_secrets
 from djevops.litestream import get_litestream_config
@@ -17,7 +17,7 @@ from os.path import exists
 from random import randint
 from shlex import quote
 from shutil import rmtree, copyfile
-from subprocess import PIPE, STDOUT, run, CalledProcessError, DEVNULL
+from subprocess import run, CalledProcessError, DEVNULL
 from time import sleep
 
 import sys
@@ -86,7 +86,7 @@ def main():
 
     log('Configuring services...')
     primary_domain = ''
-    admin_email = None
+    admin_email = ''
     service_domains = {}
     services_users_envs = get_services_users_envs(config, secrets)
     changed_bashrcs = set()
@@ -164,19 +164,7 @@ def main():
 
     if service_domains:
         install_if_not_installed('certbot', 'python3-certbot-nginx')
-        register_args = ['certbot', 'register', '--quiet', '--agree-tos']
-        if admin_email:
-            register_args.extend(['--email', admin_email])
-        else:
-            register_args.append('--register-unsafely-without-email')
-        try:
-            run(
-                register_args, stdout=PIPE, stderr=STDOUT, text=True, check=True
-            )
-        except CalledProcessError as e:
-            if e.returncode != 1 or \
-                not 'There is an existing account' in e.stdout:
-                raise
+        require(LetsEncryptRegistration(admin_email))
         for service_name, domains in service_domains.items():
             certbot_cmd = [
                 'certbot', 'certonly', '--nginx', '--cert-name', service_name,

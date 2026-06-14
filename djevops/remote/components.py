@@ -2,7 +2,7 @@ from djevops.remote.util import chown, ensure_group_exists, \
     ensure_user_exists, run as _run, symlink_force
 from djevops.util import get_apt_install_cmd
 from os import chmod, makedirs, remove
-from os.path import expanduser, join
+from os.path import exists, expanduser, join
 from urllib.request import urlretrieve
 
 class Component:
@@ -213,3 +213,30 @@ class Hostname(Component):
 
     def __str__(self):
         return f'Hostname {self.name}'
+
+
+class LetsEncryptRegistration(Component):
+
+    ACCOUNTS_DIR = '/etc/letsencrypt/accounts'
+
+    def __init__(self, email=''):
+        self.email = email
+
+    def install(self):
+        if exists(self.ACCOUNTS_DIR):
+            cmd = \
+                ['certbot', 'update_account', '--quiet', '--email', self.email]
+        else:
+            cmd = ['certbot', 'register', '--quiet', '--agree-tos']
+            if self.email:
+                cmd.extend(['--email', self.email])
+            else:
+                cmd.append('--register-unsafely-without-email')
+        _run(cmd)
+
+    @property
+    def state(self):
+        return self.email
+
+    def __str__(self):
+        return "Let's Encrypt registration"
