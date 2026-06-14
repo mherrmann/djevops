@@ -2,16 +2,18 @@ from djevops.remote.util import chown, ensure_group_exists, \
     ensure_user_exists, run as _run, symlink_force
 from djevops.util import get_apt_install_cmd
 from os import chmod, makedirs, remove
-from os.path import expanduser, exists, join
-from pwd import getpwnam
-from shutil import which
-from subprocess import PIPE, STDOUT, run, CalledProcessError
+from os.path import expanduser, join
 from urllib.request import urlretrieve
 
 class Component:
 
-    def is_installed(self):
-        raise NotImplementedError
+    @property
+    def key(self):
+        return None
+
+    @property
+    def state(self):
+        return None
 
     def install(self):
         raise NotImplementedError
@@ -22,19 +24,12 @@ class AptPackage(Component):
     def __init__(self, name):
         self.name = name
 
-    def is_installed(self):
-        cp = run(
-            ['dpkg', '-s', self.name],
-            stdout=PIPE, stderr=STDOUT, text=True
-        )
-        if cp.returncode == 0:
-            return True
-        elif cp.returncode == 1 and 'is not installed' in cp.stdout:
-            return False
-        raise CalledProcessError(cp.returncode, cp.args, cp.stdout)
-
     def install(self):
         _run(get_apt_install_cmd(self.name))
+
+    @property
+    def key(self):
+        return self.name
 
     def __str__(self):
         return self.name
@@ -45,19 +40,16 @@ class SshKey(Component):
     def __init__(self, contents):
         self.contents = contents
 
-    def is_installed(self):
-        try:
-            with open(self._path) as f:
-                return f.read() == self.contents
-        except FileNotFoundError:
-            return False
-
     def install(self):
         with open(self._path, 'w') as f:
             f.write(self.contents)
         chmod(self._path, 0o600)
         _run(f"ssh-keygen -y -f {self._path} > {self._path}.pub")
         chmod(f'{self._path}.pub', 0o644)
+
+    @property
+    def state(self):
+        return self.contents
 
     @property
     def _path(self):
@@ -72,16 +64,13 @@ class KnownHostsEntry(Component):
     def __init__(self, host):
         self.host = host
 
-    def is_installed(self):
-        try:
-            with open(self._path) as f:
-                return self.host in f.read()
-        except FileNotFoundError:
-            return False
-
     def install(self):
         _run(f"ssh-keyscan -H {self.host} >> {self._path} 2>/dev/null")
         chmod(self._path, 0o600)
+
+    @property
+    def key(self):
+        return self.host
 
     @property
     def _path(self):
@@ -96,11 +85,12 @@ class VirtualEnvironment(Component):
     def __init__(self, path):
         self.path = path
 
-    def is_installed(self):
-        return exists(self.path)
-
     def install(self):
         _run(f'uv venv {self.path}')
+
+    @property
+    def key(self):
+        return self.path
 
     def __str__(self):
         return f'Virtual environment {self.path}'
@@ -112,17 +102,6 @@ class ServiceUser(Component):
         self.user = user
         self.env = env
         self.group = group
-
-    def is_installed(self):
-        try:
-            getpwnam(self.user)
-        except KeyError:
-            return False
-        try:
-            with open(self._bashrc_path) as f:
-                return f.read() == self._bashrc_contents
-        except FileNotFoundError:
-            return False
 
     def install(self):
         ensure_group_exists(self.user)
@@ -137,6 +116,14 @@ class ServiceUser(Component):
         with open(self._bashrc_path, 'w') as f:
             f.write(self._bashrc_contents)
         chown(self._bashrc_path, self.user, self.user)
+
+    @property
+    def key(self):
+        return self.user
+
+    @property
+    def state(self):
+        return {'env': self.env, 'group': self.group}
 
     @property
     def _home_dir(self):
@@ -162,9 +149,6 @@ class SelfSignedCertificate(Component):
         self.directory = directory
         self.common_name = common_name
 
-    def is_installed(self):
-        return exists(self._privkey_path)
-
     def install(self):
         makedirs(self.directory, exist_ok=True)
         _run([
@@ -174,6 +158,14 @@ class SelfSignedCertificate(Component):
             '-days', '36500',
             '-subj', f'/CN={self.common_name}'
         ])
+
+    @property
+    def key(self):
+        return self.directory
+
+    @property
+    def state(self):
+        return self.common_name
 
     @property
     def _privkey_path(self):
@@ -190,9 +182,6 @@ class SelfSignedCertificate(Component):
 class Litestream(Component):
 
     VERSION = '0.5.6'
-
-    def is_installed(self):
-        return which('litestream') is not None
 
     def install(self):
         deb_path, _ = urlretrieve(self._deb_url)
@@ -215,11 +204,12 @@ class Hostname(Component):
     def __init__(self, name):
         self.name = name
 
-    def is_installed(self):
-        return _run('hostname') == self.name
-
     def install(self):
         _run(['hostnamectl', 'set-hostname', self.name])
+
+    @property
+    def state(self):
+        return self.name
 
     def __str__(self):
         return f'Hostname {self.name}'

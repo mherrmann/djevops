@@ -7,7 +7,8 @@ from djevops.config import get_services_users_envs, SQLITE_DB_FILE, \
 from djevops.litestream import get_litestream_config
 from djevops.remote.actions import install_python_deps, migrate_db, \
     collect_static_files, get_django_setting
-from djevops.remote.scaffold import get_deploy_config, get_secrets
+from djevops.remote.scaffold import get_deploy_config, get_secrets, \
+    load_components, save_components
 from djevops.remote.util import chown, ensure_group_exists, run as _run, \
     symlink_force
 from djevops.util import copy_with_replace, is_domain
@@ -364,10 +365,16 @@ def main():
     log('Done.')
 
 def require(component):
-    if component.is_installed():
+    key = type(component).__name__
+    if component.key is not None:
+        key += f':{component.key}'
+    components = load_components()
+    if key in components and components[key] == component.state:
         return False
     log(f'Installing {component}...')
     component.install()
+    components[key] = component.state
+    save_components(components)
     return True
 
 def debconf_set_selections(value):
