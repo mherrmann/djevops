@@ -1,6 +1,6 @@
 from datetime import datetime
 from djevops.remote.components import AptPackage, SshKey, KnownHostsEntry, \
-    SelfSignedCertificate, ServiceUser, VirtualEnvironment
+    Litestream, SelfSignedCertificate, ServiceUser, VirtualEnvironment
 from djevops.config import get_services_users_envs, SQLITE_DB_FILE, \
     interpolate_secrets
 from djevops.litestream import get_litestream_config
@@ -14,18 +14,15 @@ from os import chmod, makedirs, remove
 from os.path import exists
 from random import randint
 from shlex import quote
-from shutil import rmtree, copyfile, which
+from shutil import rmtree, copyfile
 from subprocess import PIPE, STDOUT, run, CalledProcessError, DEVNULL
 from time import sleep
-from urllib.request import urlretrieve
 
 import sys
 import yaml
 
 TERMINAL_COLOR_SUCCESS = 93
 TERMINAL_COLOR_ERROR = 91
-
-LITESTREAM_VERSION = '0.5.6'
 
 def main():
     config = get_deploy_config()
@@ -272,15 +269,7 @@ def main():
     if db:
         backup = db.get('backup')
         if backup:
-            if not which('litestream'):
-                log('Installing Litestream...')
-                deb_path, _ = urlretrieve(
-                    f'https://github.com/benbjohnson/litestream/releases/'
-                    f'download/v{LITESTREAM_VERSION}/litestream-'
-                    f'{LITESTREAM_VERSION}-linux-x86_64.deb'
-                )
-                _run(['dpkg', '-i', deb_path])
-                remove(deb_path)
+            require(Litestream())
             backup_config = interpolate_secrets(backup, secrets)
             litestream_config = get_litestream_config(backup_config)
             with open('/etc/litestream.yml', 'w') as f:

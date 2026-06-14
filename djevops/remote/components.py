@@ -1,10 +1,12 @@
 from djevops.remote.util import chown, ensure_group_exists, \
     ensure_user_exists, run as _run, symlink_force
 from djevops.util import get_apt_install_cmd
-from os import chmod, makedirs
+from os import chmod, makedirs, remove
 from os.path import expanduser, exists, join
 from pwd import getpwnam
+from shutil import which
 from subprocess import PIPE, STDOUT, run, CalledProcessError
+from urllib.request import urlretrieve
 
 class Component:
 
@@ -183,3 +185,26 @@ class SelfSignedCertificate(Component):
 
     def __str__(self):
         return f'Self-signed certificate {self._privkey_path}'
+
+
+class Litestream(Component):
+
+    VERSION = '0.5.6'
+
+    def is_installed(self):
+        return which('litestream') is not None
+
+    def install(self):
+        deb_path, _ = urlretrieve(self._deb_url)
+        _run(['dpkg', '-i', deb_path])
+        remove(deb_path)
+
+    @property
+    def _deb_url(self):
+        return (
+            f'https://github.com/benbjohnson/litestream/releases/download/'
+            f'v{self.VERSION}/litestream-{self.VERSION}-linux-x86_64.deb'
+        )
+
+    def __str__(self):
+        return f'Litestream {self.VERSION}'
