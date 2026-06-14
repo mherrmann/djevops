@@ -58,7 +58,7 @@ class SshKey(Component):
     @property
     def _path(self):
         return expanduser('~/.ssh/id_rsa')
-    
+
     def __str__(self):
         return f'SSH key {self._path}'
 
@@ -82,6 +82,6 @@ class KnownHostsEntry(Component):
     @property
     def _path(self):
         return expanduser('~/.ssh/known_hosts')
-    
+
     def __str__(self):
         return f'Known hosts entry for {self.host}'
