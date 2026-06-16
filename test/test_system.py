@@ -6,10 +6,6 @@ from djevops.remote.actions import MANAGE_SH
 from djevops.util import git, run_silently
 from dnsimple import Client as DNSimpleClient
 from dnsimple.struct.zone_record import ZoneRecordInput
-from hcloud import Client as HetznerClient
-from hcloud._exceptions import APIException
-from hcloud.images import Image
-from hcloud.server_types import ServerType
 from imaplib import IMAP4_SSL
 from os import chdir, makedirs, remove
 from os.path import join
@@ -17,6 +13,7 @@ from pathlib import Path
 from shlex import quote
 from subprocess import DEVNULL, run, CalledProcessError
 from tempfile import NamedTemporaryFile, TemporaryDirectory
+from test import hetzner
 from time import time, sleep, monotonic
 from unittest import TestCase
 
@@ -279,7 +276,7 @@ class OnlineTest(_DjevopsTest):
         cls.cleanup_actions = []
         try:
             ssh_key_content = cls.SSH_PUBLIC_KEY.read_text().strip()
-            cls.ssh_key = ensure_hetzner_ssh_key_exists(
+            cls.ssh_key = hetzner.ensure_ssh_key_exists(
                 HETZNER_API_TOKEN, ssh_key_content, cls.test_name
             )
             cls.cleanup_actions.append(cls.ssh_key.delete)
@@ -288,7 +285,7 @@ class OnlineTest(_DjevopsTest):
                 cls.known_hosts_file = known_hosts_file.name
             cls.cleanup_actions.append(lambda: remove(cls.known_hosts_file))
 
-            cls.server = create_hetzner_server(
+            cls.server = hetzner.create_server(
                 HETZNER_API_TOKEN, cls.ssh_key, cls.test_name
             )
             cls.cleanup_actions.append(cls.server.delete)
@@ -646,30 +643,6 @@ class OnlineTest(_DjevopsTest):
         )
         self._ssh(f'su -c {quote(cmd_as_user)} - {user}')
 
-
-def ensure_hetzner_ssh_key_exists(api_token, ssh_key_content, name):
-    hetzner = HetznerClient(token=api_token)
-    try:
-        return hetzner.ssh_keys.create(name=name, public_key=ssh_key_content)
-    except APIException as e:
-        if e.code != 'uniqueness_error':
-            raise
-        all_keys = hetzner.ssh_keys.get_all()
-        for key in all_keys:
-            if key.public_key == ssh_key_content:
-                return key
-        else:
-            raise LookupError("SSH key exists but couldn't find it via the API")
-
-def create_hetzner_server(
-    api_token, ssh_key, name, server_type='cx23', image='debian-13'
-):
-    hetzner = HetznerClient(token=api_token)
-    response = hetzner.servers.create(
-        name=name, server_type=ServerType(name=server_type),
-        image=Image(name=image), ssh_keys=[ssh_key]
-    )
-    return response.server
 
 class DNSimpleARecord:
     @classmethod
