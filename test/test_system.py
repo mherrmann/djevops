@@ -1,4 +1,3 @@
-from botocore.config import Config
 from contextlib import closing
 from djevops.__main__ import init, deploy, getbackup
 from djevops.config import SQLITE_DB_FILE
@@ -13,11 +12,11 @@ from tempfile import NamedTemporaryFile, TemporaryDirectory
 from test import hetzner
 from test.base import SystemTest
 from test.dnsimple import DNSimpleARecord
+from test.s3 import delete_directory_from_s3
 from test.util import commit, cd_to_temp_dir, write_pyproject_toml, \
     add_dep_to_pyproject_toml, wait_for_server_to_be_ready, wait_for_email
 from time import time, sleep, monotonic
 
-import boto3
 import celery
 import django
 import os
@@ -430,23 +429,3 @@ class OnlineTest(SystemTest):
             f"chmod 600 .ssh/authorized_keys"
         )
         self._ssh(f'su -c {quote(cmd_as_user)} - {user}')
-
-def delete_directory_from_s3(
-    region, endpoint, access_key, secret_key, bucket, prefix
-):
-    config = Config(s3={
-        'addressing_style': 'path',
-        'payload_signing_enabled': True
-    })
-    s3 = boto3.client(
-        's3',
-        region_name=region,
-        endpoint_url='https://' + endpoint,
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        config=config
-    )
-    paginator = s3.get_paginator('list_objects_v2')
-    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
-        objects = [{'Key': obj['Key']} for obj in page.get('Contents', [])]
-        s3.delete_objects(Bucket=bucket, Delete={'Objects': objects})
