@@ -15,7 +15,7 @@ from test import hetzner
 from test.base import SystemTest
 from test.dnsimple import DNSimpleARecord
 from test.util import commit, cd_to_temp_dir, write_pyproject_toml, \
-    add_dep_to_pyproject_toml
+    add_dep_to_pyproject_toml, wait_for_server_to_be_ready
 from time import time, sleep, monotonic
 
 import boto3
@@ -431,25 +431,6 @@ class OnlineTest(SystemTest):
             f"chmod 600 .ssh/authorized_keys"
         )
         self._ssh(f'su -c {quote(cmd_as_user)} - {user}')
-
-
-def wait_for_server_to_be_ready(
-    user, host, ssh_key_path, known_hosts_file, timeout_secs=60
-):
-    end_time = monotonic() + timeout_secs
-    while monotonic() < end_time:
-        cp = run([
-            'ssh', '-i', str(ssh_key_path),
-            '-o', 'StrictHostKeyChecking=accept-new',
-            '-o', 'UserKnownHostsFile=' + known_hosts_file,
-            '-o', 'ConnectTimeout=5',
-            f'{user}@{host}', 'echo ready'
-        ], stdout=DEVNULL, stderr=DEVNULL)
-        if cp.returncode == 0:
-            break
-        sleep(1)
-    else:
-        raise TimeoutError(f'Server not ready after {timeout_secs} seconds')
 
 def wait_for_email(
     imap_host, user, password, subject, delete=False, timeout_secs=60
