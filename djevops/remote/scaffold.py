@@ -8,6 +8,11 @@ DEPLOY_CONFIG_PATH = join(STATE_DIR, 'deploy.yml')
 SECRETS_PATH = join(STATE_DIR, 'secrets.json')
 COMPONENTS_PATH = join(STATE_DIR, 'components.json')
 
+# We have /srv/venv/bin/python on the server, but that's the Django app's
+# virtual environment. It does not necessarily have djevops and certainly does
+# not have a development version of djevops.
+DJEVOPS_PYTHON = '/opt/djevops/.venv/bin/python'
+
 def get_deploy_config():
     with open(DEPLOY_CONFIG_PATH) as f:
         return yaml.safe_load(f)

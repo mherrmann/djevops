@@ -40,3 +40,7 @@ def interpolate_secrets(dict_, secrets):
         k: secrets.get(v, v)
         for k, v in dict_.items()
     }
+
+def get_backup_config(config, secrets):
+    backup = (config.get('db') or {}).get('backup')
+    return interpolate_secrets(backup, secrets) if backup else None

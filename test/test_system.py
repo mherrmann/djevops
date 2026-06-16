@@ -2,9 +2,10 @@ from contextlib import closing
 from djevops.__main__ import init, deploy, getbackup
 from djevops.config import SQLITE_DB_FILE
 from djevops.remote.actions import MANAGE_SH
+from djevops import s3
 from djevops.util import git, run_silently
-from os import makedirs, remove
-from os.path import join
+from os import remove
+from os.path import basename
 from pathlib import Path
 from shlex import quote
 from subprocess import CalledProcessError
@@ -12,7 +13,8 @@ from tempfile import NamedTemporaryFile, TemporaryDirectory
 from test import hetzner
 from test.base import SystemTest
 from test.dnsimple import DNSimpleARecord
-from test.s3 import delete_directory_from_s3
+from test.postgres import query_postgres_dump
+from test.s3 import delete_prefix_from_s3
 from test.util import commit, cd_to_temp_dir, write_pyproject_toml, \
     add_dep_to_pyproject_toml, wait_for_server_to_be_ready, wait_for_email
 from time import time, sleep, monotonic
@@ -37,16 +39,12 @@ S3_SECRET_KEY = os.environ['S3_SECRET_KEY']
 S3_REGION = os.environ['S3_REGION']
 S3_ENDPOINT = os.environ['S3_ENDPOINT']
 
-S3_DB_BACKUP_DIR = 'db-backup'
-
 # Can use (non-business) Gmail for these: smtp.gmail.com, imap.gmail.com.
 # The user is the email address. The password is an "app password".
 SMTP_HOST = os.environ['SMTP_HOST']
 IMAP_HOST = os.environ['IMAP_HOST']
 EMAIL_USER = os.environ['EMAIL_USER']
 EMAIL_PASSWORD = os.environ['EMAIL_PASSWORD']
-
-QUIET = True
 
 
 class OnlineTest(SystemTest):
@@ -97,8 +95,6 @@ class OnlineTest(SystemTest):
             )
 
             cls.server_hostname = f'{cls.test_name}.{DNSIMPLE_TEST_DOMAIN}'
-            # In case they're left over from a previous test run:
-            cls._delete_db_backups_from_s3()
             cls.cleanup_actions.append(cls._delete_db_backups_from_s3)
             cls.cleanup_actions.append(
                 lambda: cls._delete_remote_branch_if_exists(cls.test_name)
@@ -148,6 +144,22 @@ class OnlineTest(SystemTest):
             }
 
     @classmethod
+    def _get_backup_config(cls, plain_secrets=True):
+        return {
+            'type': 's3',
+            'bucket': S3_BUCKET,
+            'access-key-id': \
+                S3_ACCESS_KEY if plain_secrets else 'S3_ACCESS_KEY',
+            'secret-access-key': \
+                S3_SECRET_KEY if plain_secrets else 'S3_SECRET_KEY',
+            'path': 'db.sql',
+            'region': S3_REGION,
+            'endpoint': S3_ENDPOINT,
+            'force-path-style': True,
+            'sign-payload': True
+        }
+
+    @classmethod
     def _delete_remote_branch_if_exists(cls, name):
         try:
             git('push', 'origin', '--delete', name)
@@ -156,10 +168,11 @@ class OnlineTest(SystemTest):
 
     @classmethod
     def _delete_db_backups_from_s3(cls):
-        delete_directory_from_s3(
-            S3_REGION, S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET,
-            S3_DB_BACKUP_DIR
-        )
+        backup_config = cls._get_backup_config()
+        remote_path = backup_config['path']
+        # SQLite backups are inside remote_path/, PostgreSQL backups are at
+        # remote_path. Deleting the prefix removes both.
+        delete_prefix_from_s3(backup_config, remote_path)
 
     def tearDown(self):
         super().tearDown()
@@ -168,7 +181,7 @@ class OnlineTest(SystemTest):
             deploy_yml['services']['web']['env']['clear']['DEBUG'] = 'True'
 
     def test_http(self):
-        deploy(QUIET)
+        deploy(self.QUIET)
         response = requests.get(f'http://{self.server_ip}')
         self.assertEqual(response.status_code, 200)
         self.assertIn('The install worked', response.text)
@@ -177,43 +190,52 @@ class OnlineTest(SystemTest):
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['services']['web']['env']['clear']['ALLOWED_HOSTS'] += \
                 f' {self.server_hostname}'
-        deploy(QUIET)
+        deploy(self.QUIET)
         response = requests.get(f'https://{self.server_hostname}')
         self.assertEqual(response.status_code, 200)
         self.assertIn('The install worked', response.text)
 
-    def test_getbackup_without_config(self):
-        # `getbackup` should still work without a `backup` entry in the config.
-        self._configure_sqlite()
-        git('push')
-        deploy(QUIET)
-        self.assertGreater(
-            self._execute_against_sqlite_backup(
-                "SELECT COUNT(*) FROM django_migrations"
-            ),
-            0
-        )
-
     def test_sqlite_backup(self):
         self._configure_sqlite()
+        # An earlier test may have deployed a database. That would make the
+        # restore-on-fresh-install during `deploy()` be skipped. Reset the
+        # server and S3 so that the backup we upload is actually restored:
+        self._ssh('systemctl stop litestream 2>/dev/null || true')
+        self._ssh(f'rm -f {SQLITE_DB_FILE}')
+        self._test_backup(
+            self._upload_mock_sqlite_backup_to_s3,
+            self._execute_against_sqlite_backup,
+            sync_interval='1s'
+        )
+
+    def test_postgres_backup(self):
+        self._configure_postgres()
+        self._test_backup(
+            self._upload_mock_postgres_backup_to_s3,
+            self._execute_against_postgres_backup,
+            # PostgreSQL doesn't support sub-minute sync intervals.
+            sync_interval='1m'
+        )
+
+    def _test_backup(
+        self, upload_mock_backup_to_s3, execute_against_backup, sync_interval
+    ):
+        self._delete_db_backups_from_s3()
         with self.update_deploy_yml() as deploy_yml:
-            deploy_yml['db']['backup'] = \
-                self._get_backup_config(plain_secrets=False)
+            deploy_yml['db']['backup'] = {
+                **self._get_backup_config(plain_secrets=False),
+                'sync-interval': sync_interval
+            }
         self.add_to_secrets({
             'S3_ACCESS_KEY': S3_ACCESS_KEY,
             'S3_SECRET_KEY': S3_SECRET_KEY
         })
 
         table = self.test_name
-        self._upload_mock_sqlite_backup_to_s3(f"CREATE TABLE {table}(id)")
-
-        # The server is shared between tests. An earlier test may have already
-        # created the database, in which case the deploy below would skip     
-        # restoring our backup. Remove it so the restore actually runs.       
-        self._ssh(f'rm -f {SQLITE_DB_FILE}')                                  
+        upload_mock_backup_to_s3(f"CREATE TABLE {table}(id integer)")
 
         git('push')
-        deploy(QUIET)
+        deploy(self.QUIET)
 
         count_rows = f"SELECT COUNT(*) FROM {table}"
         # The following line tests that the backup was restored. (If it weren't,
@@ -227,57 +249,11 @@ class OnlineTest(SystemTest):
 
         end_time = monotonic() + 60
         while monotonic() < end_time:
-            if self._execute_against_sqlite_backup(count_rows) == 1:
+            if execute_against_backup(count_rows) == 1:
                 break
             sleep(1)
         else:
             self.fail(f'Backup was not created')
-
-    def _configure_sqlite(self):
-        with self.update_deploy_yml() as deploy_yml:
-            deploy_yml['db'] = {'type': 'sqlite'}
-        self.add_to_settings([
-            "DATABASES['default']['NAME'] = os.getenv('SQLITE_DB_FILE') "
-            "or DATABASES['default']['NAME']"
-        ])
-
-    def _upload_mock_sqlite_backup_to_s3(self, sql):
-        with TemporaryDirectory() as tmp_dir:
-            db_file = Path(tmp_dir) / 'db.sqlite3'
-            con = sqlite3.connect(db_file)
-            con.execute(sql)
-            con.commit()
-            con.close()
-            litestream_yml = Path(tmp_dir) / 'litestream.yml'
-            litestream_yml.write_text(yaml.dump({
-                'dbs': [{
-                    'path': str(db_file),
-                    'replica': self._get_backup_config()
-                }]
-            }))
-            run_silently([
-                'litestream', 'replicate', '-once', '-config', litestream_yml
-            ])
-
-    def _execute_against_sqlite_backup(self, sql):
-        getbackup(QUIET, force=True)
-        with closing(sqlite3.connect('db.sqlite3')) as connection:
-            return connection.execute(sql).fetchone()[0]
-
-    def _get_backup_config(self, plain_secrets=True):
-        return {
-            'type': 's3',
-            'bucket': S3_BUCKET,
-            'access-key-id': \
-                S3_ACCESS_KEY if plain_secrets else 'S3_ACCESS_KEY',
-            'secret-access-key': \
-                S3_SECRET_KEY if plain_secrets else 'S3_SECRET_KEY',
-            'path': S3_DB_BACKUP_DIR,
-            'region': S3_REGION,
-            'endpoint': S3_ENDPOINT,
-            'force-path-style': True,
-            'sign-payload': True
-        }
 
     def test_email(self):
         with self.update_deploy_yml() as deploy_yml:
@@ -293,7 +269,7 @@ class OnlineTest(SystemTest):
         })
 
         git('push')
-        deploy(QUIET)
+        deploy(self.QUIET)
 
         send_mail_script = [
             "from django.core.mail import send_mail",
@@ -322,7 +298,7 @@ class OnlineTest(SystemTest):
         commit(test_txt, 'Add static file')
 
         git('push')
-        deploy(QUIET)
+        deploy(self.QUIET)
 
         response = requests.get(
             f'https://{self.server_hostname}/{test_txt_relpath}'
@@ -374,7 +350,7 @@ class OnlineTest(SystemTest):
         commit(tasks_py, 'Add celery task')
 
         git('push')
-        deploy(QUIET)
+        deploy(self.QUIET)
 
         run_task_script = [
             f'from {self.DJANGO_APP_NAME}.tasks import test_task',
@@ -394,15 +370,80 @@ class OnlineTest(SystemTest):
                 'env': {'inherit': 'web'}
             }
 
-        deploy(QUIET)
+        deploy(self.QUIET)
 
         output = self._ssh(f'cat /var/log/{service_name}.log')
         self.assertIn(marker, output)
 
+    def _configure_sqlite(self):
+        with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['db'] = {'type': 'sqlite'}
+        self.add_to_settings([
+            "DATABASES['default'] = {",
+            "    'ENGINE': 'django.db.backends.sqlite3',",
+            "    'NAME': os.getenv('SQLITE_DB_FILE')",
+            "}"
+        ])
+
+    def _upload_mock_sqlite_backup_to_s3(self, sql):
+        with TemporaryDirectory() as tmp_dir:
+            db_file = Path(tmp_dir) / 'db.sqlite3'
+            con = sqlite3.connect(db_file)
+            con.execute(sql)
+            con.commit()
+            con.close()
+            litestream_yml = Path(tmp_dir) / 'litestream.yml'
+            litestream_yml.write_text(yaml.dump({
+                'dbs': [{
+                    'path': str(db_file),
+                    'replica': self._get_backup_config()
+                }]
+            }))
+            run_silently([
+                'litestream', 'replicate', '-once', '-config', litestream_yml
+            ])
+
+    def _execute_against_sqlite_backup(self, sql):
+        getbackup(self.QUIET, force=True)
+        with closing(sqlite3.connect('db.sqlite3')) as connection:
+            return connection.execute(sql).fetchone()[0]
+
+    def _configure_postgres(self):
+        with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['db'] = {'type': 'postgres'}
+            deploy_yml['services']['web']['env']['secret'] = ['DB_PASSWORD']
+        self.add_to_secrets({'DB_PASSWORD': self.test_name})
+        self.add_to_settings([
+            "DATABASES['default'] = {",
+            "    'ENGINE': 'django.db.backends.postgresql',",
+            f"    'NAME': {self.test_name!r},",
+            f"    'USER': {self.test_name!r},",
+            "    'PASSWORD': os.environ['DB_PASSWORD'],",
+            "    'HOST': 'localhost',",
+            "}"
+        ])
+        add_dep_to_pyproject_toml('psycopg[binary]')
+        commit('pyproject.toml', 'Add psycopg')
+
+    def _upload_mock_postgres_backup_to_s3(self, sql):
+        with NamedTemporaryFile(mode='w', suffix='.sql') as dump_file:
+            dump_file.write(sql + ';\n')
+            dump_file.flush()
+            backup_config = self._get_backup_config()
+            remote_path = backup_config['path']
+            s3.upload(backup_config, dump_file.name, remote_path)
+
+    def _execute_against_postgres_backup(self, sql):
+        getbackup(self.QUIET, force=True)
+        sql_file = basename(self._get_backup_config()['path'])
+        return query_postgres_dump(sql_file, sql)
+
     def _execute_remote_sql(self, sql, user):
         django_cmd = [
             "from django.db import connection",
-            f"result = connection.cursor().execute('{sql}').fetchone()",
+            "cursor = connection.cursor()",
+            f"cursor.execute('{sql}')",
+            "result = cursor.fetchone() if cursor.description else None",
             "print(result[0] if result is not None else '')"
         ]
         output = self._execute_remote_django_shell(django_cmd, user)

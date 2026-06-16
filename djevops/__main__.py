@@ -1,7 +1,8 @@
 from argparse import ArgumentParser
-from djevops import GIT_HINT
-from djevops.config import get_services_users_envs, get_django_service, \
-    interpolate_secrets, SQLITE_DB_FILE
+from djevops import GIT_HINT, s3
+from djevops.backup import as_cron, parse_sync_interval
+from djevops.config import get_backup_config, get_services_users_envs, \
+    get_django_service, SQLITE_DB_FILE
 from djevops.litestream import get_litestream_config
 from djevops.remote.scaffold import STATE_DIR, DEPLOY_CONFIG_PATH, SECRETS_PATH
 from djevops.util import git, get_apt_install_cmd, prompt_yes_no, \
@@ -146,7 +147,31 @@ def deploy(quiet=False, dry_run=False):
 
 def getbackup(quiet=False, force=False):
     config, secrets = load_config()
-    output = basename(SQLITE_DB_FILE)
+    db_type = (config.get('db') or {}).get('type')
+    if not db_type:
+        raise CommandError(
+            "The `db` section in deploy/djevops.yml is not configured."
+        )
+    backup_config = get_backup_config(config, secrets)
+    if not backup_config:
+        raise CommandError(
+            "The `backup` section in the `db` section in deploy/djevops.yml "
+            "is not configured."
+        )
+    if db_type == 'sqlite':
+        remote_path = SQLITE_DB_FILE
+    else:
+        try:
+            remote_path = backup_config['path']
+        except KeyError:
+            raise CommandError(
+                "The `path` key is not set in the `backup` section in the "
+                "`db` section in deploy/djevops.yml. For example:\n"
+                "    db:\n"
+                "      backup:\n"
+                "        path: db.sql"
+            ) from None
+    output = basename(remote_path)
     if exists(output):
         if force:
             remove(output)
@@ -157,19 +182,17 @@ def getbackup(quiet=False, force=False):
                 return
         else:
             raise CommandError(f'{output} already exists. Please remove it.')
-    try:
-        backup = config['db']['backup']
-    except KeyError:
-        scp(f"root@{config['server']}:{SQLITE_DB_FILE}", output)
+    if db_type == 'postgres':
+        if not s3.download(backup_config, output, remote_path):
+            raise CommandError("No backup found.")
     else:
-        _restore_with_litestream(backup, secrets, output)
+        _restore_with_litestream(backup_config, output)
     if not quiet:
         print(f'Downloaded backup to {output}')
 
-def _restore_with_litestream(backup, secrets, output):
+def _restore_with_litestream(backup_config, output):
     if not which('litestream'):
         raise CommandError('Please install https://litestream.io first')
-    backup_config = interpolate_secrets(backup, secrets)
     litestream_config = get_litestream_config(backup_config)
     config_file = NamedTemporaryFile(mode='w', delete=False, suffix='.yml')
     yaml.safe_dump(litestream_config, config_file)
@@ -224,7 +247,8 @@ def check_config(deploy_config, secrets):
     django_env = user_envs[django_service_name][1]
 
     if 'db' in deploy_config:
-        db_type = (deploy_config['db'] or {}).get('type')
+        db = deploy_config['db'] or {}
+        db_type = db.get('type')
         if db_type not in ('sqlite', 'postgres'):
             raise CommandError(
                 'Please remove the `db` section in deploy/djevops.yml or set '
@@ -232,6 +256,22 @@ def check_config(deploy_config, secrets):
                 '    db:\n'
                 '      type: sqlite'
             )
+        backup = db.get('backup')
+        if backup:
+            sync_interval_str = backup.get('sync-interval')
+            if sync_interval_str:
+                error = CommandError(
+                    f"Invalid `sync-interval`: {sync_interval_str!r}."
+                )
+                try:
+                    sync_interval_secs = parse_sync_interval(sync_interval_str)
+                    # Litestream accepts any interval, but PostgreSQL backups
+                    # run from cron, so the interval must also be expressible as
+                    # a cron schedule.
+                    if db_type == 'postgres':
+                        as_cron(sync_interval_secs)
+                except ValueError:
+                    raise error from None
     else:
         db_type = None
 

@@ -87,11 +87,75 @@ db:
 Backups are created continuously while your server is running. If you ever
 re-install your server, then the latest backup is automatically restored.
 
-djevops uses [Litestream](https://litestream.io/) for SQLite backups. Litestream
-can store backups in S3, Azure Blob Storage and many others. The keys you add to
-the `backup` element above get copied into a `replica` element in Litestream's
-config. For more information about the available options, please
+For database type `sqlite`, djevops uses [Litestream](https://litestream.io/)
+for backups. Litestream can store backups in S3, Azure Blob Storage and many
+others. The keys you add to the `backup` element above get copied into a
+`replica` element in Litestream's config. For more information about the
+available options, please
 see [Litestream's documentation](https://litestream.io/reference/config/).
+
+Djevops also supports database type `postgres`. For more information about this,
+please see below.
+</details>
+
+<details>
+<summary>PostgreSQL</summary>
+
+Instead of SQLite, you can use PostgreSQL by setting the database `type` to
+`postgres`:
+
+```
+db:
+  type: postgres
+```
+
+You then configure the connection yourself in your `settings.py`:
+
+```
+import os
+
+DATABASES['default'] = {
+    'ENGINE': 'django.db.backends.postgresql',
+    'NAME': 'myapp',
+    'USER': 'myapp',
+    'PASSWORD': os.environ['DB_PASSWORD'],
+    'HOST': 'localhost',
+    'PORT': 5432,
+}
+```
+
+djevops reads these settings and installs PostgreSQL on the server, creating the
+database and user (with the password) you specified. Keep the password out of
+Git by storing it in `deploy/secrets.py`. For example:
+
+```
+DB_PASSWORD = "<some strong password>"
+```
+
+Then reference it as a `secret` in the Django service's environment:
+
+```
+services:
+  web:
+    type: django
+    env:
+      secret:
+        - DB_PASSWORD
+```
+
+You also need to add the `psycopg` driver to your `pyproject.toml`:
+
+```
+dependencies = [
+    ...
+    "psycopg[binary]",
+]
+```
+
+As with SQLite, you can add a `backup` element to enable automatic backups. By
+default, PostgreSQL backups are taken once per day. You can customize this by
+setting `sync-interval` in the `backup` element, for example to `1h` for hourly
+backups.
 </details>
 
 <details>

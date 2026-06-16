@@ -1,15 +1,18 @@
 from datetime import datetime
+from djevops.backup import as_cron, parse_sync_interval
 from djevops.remote.component_registry import ComponentRegistry
 from djevops.remote.components import AptPackage, SshKey, Crontab, Hostname, \
     IptablesRules, KnownHostsEntry, LetsEncryptCertificate, \
     LetsEncryptRegistration, Litestream, NginxSite, Postfix, \
     SelfSignedCertificate, ServiceUser, TemplatedFile, VirtualEnvironment
-from djevops.config import get_services_users_envs, SQLITE_DB_FILE, \
-    interpolate_secrets
+from djevops.config import get_backup_config, get_services_users_envs, \
+    SQLITE_DB_FILE
 from djevops.litestream import get_litestream_config
+from djevops.remote import postgres
 from djevops.remote.actions import install_python_deps, migrate_db, \
     collect_static_files, get_django_setting
-from djevops.remote.scaffold import get_deploy_config, get_secrets
+from djevops.remote.scaffold import DJEVOPS_PYTHON, get_deploy_config, \
+    get_secrets
 from djevops.remote.util import chown, ensure_group_exists, run as _run, \
     symlink_force
 from djevops.util import is_domain
@@ -210,27 +213,46 @@ def main():
     if 'redis' in config:
         install_if_not_installed('redis-server')
 
+    cron_jobs = ['@reboot /opt/djevops/bin/init-run-dir.sh']
+
     db = config.get('db')
     if db:
-        backup = db.get('backup')
-        if backup:
-            require(Litestream())
-            backup_config = interpolate_secrets(backup, secrets)
-            litestream_config = get_litestream_config(backup_config)
-            with open('/etc/litestream.yml', 'w') as f:
-                yaml.safe_dump(litestream_config, f)
-            if not exists(SQLITE_DB_FILE):
+        db_type = db.get('type', 'sqlite')
+        backup_config = get_backup_config(config, secrets)
+        if db_type == 'postgres':
+            install_if_not_installed('postgresql')
+            db_config = get_django_setting('DATABASES')['default']
+            db_existed = postgres.provision(db_config)
+            if backup_config and not db_existed:
                 log('Restoring database backup...')
-                _run(['litestream', 'restore', SQLITE_DB_FILE])
-        log('Migrating database...')
-        migrate_db()
-        chown(SQLITE_DB_FILE, group_name=django_group)
-        chmod(SQLITE_DB_FILE, 0o660)
-        if backup:
-            # Do this after migrating the database and chowning the file in
-            # order to avoid race conditions.
-            _run('systemctl enable litestream')
-            _run('systemctl start litestream')
+                postgres.restore(db_config, backup_config)
+            log('Migrating database...')
+            migrate_db()
+            if backup_config:
+                sync_interval_str = backup_config.get('sync-interval', '24h')
+                sync_interval_secs = parse_sync_interval(sync_interval_str)
+                cron_jobs.append(
+                    f'{as_cron(sync_interval_secs)} cronic {DJEVOPS_PYTHON} -m '
+                    f'djevops.remote.postgres backup'
+                )
+        else:
+            if backup_config:
+                require(Litestream())
+                litestream_config = get_litestream_config(backup_config)
+                with open('/etc/litestream.yml', 'w') as f:
+                    yaml.safe_dump(litestream_config, f)
+                if not exists(SQLITE_DB_FILE):
+                    log('Restoring database backup...')
+                    _run(['litestream', 'restore', SQLITE_DB_FILE])
+            log('Migrating database...')
+            migrate_db()
+            chown(SQLITE_DB_FILE, group_name=django_group)
+            chmod(SQLITE_DB_FILE, 0o660)
+            if backup_config:
+                # Do this after migrating the database and chowning the file in
+                # order to avoid race conditions.
+                _run('systemctl enable litestream')
+                _run('systemctl start litestream')
 
     log('Creating directories for static files...')
     makedirs('/srv/static', exist_ok=True)
@@ -292,10 +314,8 @@ def main():
         else f'http://{server_ip}'
     log(f'The server is now serving requests at {server_url}!')
 
-    require(Crontab(
-        ['@reboot /opt/djevops/bin/init-run-dir.sh'],
-        mailto=admin_email,
-    ))
+    symlink_force('/opt/djevops/bin/cronic', '/usr/bin/cronic')
+    require(Crontab(cron_jobs, mailto=admin_email))
 
     install_if_not_installed('unattended-upgrades')
     with open('/etc/apt/apt.conf.d/20auto-upgrades', 'w') as f:
