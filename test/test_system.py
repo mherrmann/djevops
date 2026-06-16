@@ -1,6 +1,6 @@
 from botocore.config import Config
-from contextlib import closing, contextmanager
-from djevops.__main__ import CommandError, init, deploy, getbackup
+from contextlib import closing
+from djevops.__main__ import init, deploy, getbackup
 from djevops.config import SQLITE_DB_FILE
 from djevops.remote.actions import MANAGE_SH
 from djevops.util import git, run_silently
@@ -12,9 +12,10 @@ from shlex import quote
 from subprocess import DEVNULL, run, CalledProcessError
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from test import hetzner
+from test.base import SystemTest
 from test.dnsimple import DNSimpleARecord
+from test.util import commit
 from time import time, sleep, monotonic
-from unittest import TestCase
 
 import boto3
 import celery
@@ -53,62 +54,8 @@ QUIET = True
 GUNICORN_VERSION = '24.1.1'
 
 
-class _DjevopsTest(TestCase):
 
-    DJANGO_PROJECT_NAME = 'testproject'
-    DJANGO_APP_NAME = 'testapp'
-
-    SETTINGS_PY_RELPATH = f'{DJANGO_PROJECT_NAME}/settings.py'
-
-    def expect_init_error(self, message):
-        with self._expect_command_error(message):
-            init()
-
-    def expect_deploy_error(self, message):
-        with self._expect_command_error(message):
-            deploy(QUIET)
-
-    @classmethod
-    def start_django_project(cls):
-        run_silently([
-            'django-admin', 'startproject', cls.DJANGO_PROJECT_NAME, '.'
-        ])
-
-    @classmethod
-    def start_django_app(cls):
-        run_silently([
-            'python', 'manage.py', 'startapp', cls.DJANGO_APP_NAME
-        ])
-
-    @classmethod
-    @contextmanager
-    def update_deploy_yml(cls):
-        with open('deploy/djevops.yml') as f:
-            deploy_yml = yaml.safe_load(f)
-        yield deploy_yml
-        with open('deploy/djevops.yml', 'w') as f:
-            f.write(yaml.dump(deploy_yml))
-
-    @classmethod
-    def add_to_settings(cls, lines, do_commit=True):
-        with open(cls.SETTINGS_PY_RELPATH, 'a') as f:
-            f.write('\n' + '\n'.join(lines))
-        if do_commit:
-            commit(cls.SETTINGS_PY_RELPATH, 'Add to settings.py')
-
-    def add_to_secrets(self, dict_):
-        with open('deploy/secrets.py', 'a') as f:
-            for key, value in dict_.items():
-                f.write(f'{key} = {value!r}\n')
-
-    @contextmanager
-    def _expect_command_error(self, message):
-        with self.assertRaises(CommandError) as cm:
-            yield
-        self.assertEqual(message, cm.exception.args[0])
-
-
-class OfflineTest(_DjevopsTest):
+class OfflineTest(SystemTest):
 
     def setUp(self):
         super().setUp()
@@ -261,7 +208,7 @@ class OfflineTest(_DjevopsTest):
         )
 
 
-class OnlineTest(_DjevopsTest):
+class OnlineTest(SystemTest):
 
     TEST_DIR = Path(__file__).parent
 
@@ -660,12 +607,6 @@ def wait_for_server_to_be_ready(
         sleep(1)
     else:
         raise TimeoutError(f'Server not ready after {timeout_secs} seconds')
-
-def commit(file_path, message):
-    if isinstance(file_path, Path):
-        file_path = str(file_path)
-    git('add', file_path)
-    git('commit', '-m', message)
 
 def wait_for_email(
     imap_host, user, password, subject, delete=False, timeout_secs=60
