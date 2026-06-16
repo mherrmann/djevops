@@ -14,6 +14,8 @@ class SystemTest(TestCase):
     DJANGO_PROJECT_NAME = 'testproject'
     DJANGO_APP_NAME = 'testapp'
 
+    GUNICORN_VERSION = '24.1.1'
+
     SETTINGS_PY_RELPATH = f'{DJANGO_PROJECT_NAME}/settings.py'
 
     def expect_init_error(self, message):
