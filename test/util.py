@@ -1,5 +1,6 @@
 from pathlib import Path
 from djevops.util import git
+from imaplib import IMAP4_SSL
 from os import chdir, DEVNULL
 from subprocess import run
 from time import sleep, monotonic
@@ -55,3 +56,21 @@ def wait_for_server_to_be_ready(
         sleep(1)
     else:
         raise TimeoutError(f'Server not ready after {timeout_secs} seconds')
+
+def wait_for_email(
+    imap_host, user, password, subject, delete=False, timeout_secs=60
+):
+    end_time = monotonic() + timeout_secs
+    while monotonic() < end_time:
+        with IMAP4_SSL(imap_host) as imap:
+            imap.login(user, password)
+            imap.select('INBOX')
+            _, message_ids = imap.search(None, 'SUBJECT', subject)
+            if message_ids[0]:
+                if delete:
+                    for msg_id in message_ids[0].split():
+                        imap.store(msg_id, '+FLAGS', '\\Deleted')
+                    imap.expunge()
+                return True
+        sleep(1)
+    return False

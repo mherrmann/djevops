@@ -4,18 +4,17 @@ from djevops.__main__ import init, deploy, getbackup
 from djevops.config import SQLITE_DB_FILE
 from djevops.remote.actions import MANAGE_SH
 from djevops.util import git, run_silently
-from imaplib import IMAP4_SSL
 from os import makedirs, remove
 from os.path import join
 from pathlib import Path
 from shlex import quote
-from subprocess import DEVNULL, run, CalledProcessError
+from subprocess import CalledProcessError
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from test import hetzner
 from test.base import SystemTest
 from test.dnsimple import DNSimpleARecord
 from test.util import commit, cd_to_temp_dir, write_pyproject_toml, \
-    add_dep_to_pyproject_toml, wait_for_server_to_be_ready
+    add_dep_to_pyproject_toml, wait_for_server_to_be_ready, wait_for_email
 from time import time, sleep, monotonic
 
 import boto3
@@ -431,24 +430,6 @@ class OnlineTest(SystemTest):
             f"chmod 600 .ssh/authorized_keys"
         )
         self._ssh(f'su -c {quote(cmd_as_user)} - {user}')
-
-def wait_for_email(
-    imap_host, user, password, subject, delete=False, timeout_secs=60
-):
-    end_time = monotonic() + timeout_secs
-    while monotonic() < end_time:
-        with IMAP4_SSL(imap_host) as imap:
-            imap.login(user, password)
-            imap.select('INBOX')
-            _, message_ids = imap.search(None, 'SUBJECT', subject)
-            if message_ids[0]:
-                if delete:
-                    for msg_id in message_ids[0].split():
-                        imap.store(msg_id, '+FLAGS', '\\Deleted')
-                    imap.expunge()
-                return True
-        sleep(1)
-    return False
 
 def delete_directory_from_s3(
     region, endpoint, access_key, secret_key, bucket, prefix
