@@ -4,8 +4,6 @@ from djevops.__main__ import CommandError, init, deploy, getbackup
 from djevops.config import SQLITE_DB_FILE
 from djevops.remote.actions import MANAGE_SH
 from djevops.util import git, run_silently
-from dnsimple import Client as DNSimpleClient
-from dnsimple.struct.zone_record import ZoneRecordInput
 from imaplib import IMAP4_SSL
 from os import chdir, makedirs, remove
 from os.path import join
@@ -14,6 +12,7 @@ from shlex import quote
 from subprocess import DEVNULL, run, CalledProcessError
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from test import hetzner
+from test.dnsimple import DNSimpleARecord
 from time import time, sleep, monotonic
 from unittest import TestCase
 
@@ -643,28 +642,6 @@ class OnlineTest(_DjevopsTest):
         )
         self._ssh(f'su -c {quote(cmd_as_user)} - {user}')
 
-
-class DNSimpleARecord:
-    @classmethod
-    def create(cls, api_token, account_id, domain, subdomain, ip):
-        client = DNSimpleClient(access_token=api_token)
-        record = client.zones.create_record(
-            account_id, domain,
-            ZoneRecordInput(subdomain, type='A', content=ip, ttl=60)
-        )
-        return cls(client, account_id, domain, subdomain, record.data.id)
-    def __init__(self, client, account_id, domain, subdomain, record_id):
-        self.client = client
-        self.account_id = account_id
-        self.domain = domain
-        self.subdomain = subdomain
-        self.record_id = record_id
-    def delete(self):
-        self.client.zones.delete_record(
-            self.account_id, self.domain, self.record_id
-        )
-    def __str__(self):
-        return f'{self.subdomain}.{self.domain}'
 
 def wait_for_server_to_be_ready(
     user, host, ssh_key_path, known_hosts_file, timeout_secs=60
