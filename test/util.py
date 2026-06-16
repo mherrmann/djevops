@@ -1,8 +1,8 @@
 from pathlib import Path
 from djevops.util import git
 from imaplib import IMAP4_SSL
-from os import chdir, DEVNULL
-from subprocess import run
+from os import chdir
+from subprocess import run, DEVNULL
 from time import sleep, monotonic
 from tempfile import TemporaryDirectory
 
