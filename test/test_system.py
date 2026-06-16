@@ -198,7 +198,7 @@ class OnlineTest(SystemTest):
         self._configure_sqlite()
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['db']['backup'] = \
-                self._get_litestream_config(plain_secrets=False)
+                self._get_backup_config(plain_secrets=False)
         self.add_to_secrets({
             'S3_ACCESS_KEY': S3_ACCESS_KEY,
             'S3_SECRET_KEY': S3_SECRET_KEY
@@ -252,7 +252,7 @@ class OnlineTest(SystemTest):
             litestream_yml.write_text(yaml.dump({
                 'dbs': [{
                     'path': str(db_file),
-                    'replica': self._get_litestream_config()
+                    'replica': self._get_backup_config()
                 }]
             }))
             run_silently([
@@ -264,7 +264,7 @@ class OnlineTest(SystemTest):
         with closing(sqlite3.connect('db.sqlite3')) as connection:
             return connection.execute(sql).fetchone()[0]
 
-    def _get_litestream_config(self, plain_secrets=True):
+    def _get_backup_config(self, plain_secrets=True):
         return {
             'type': 's3',
             'bucket': S3_BUCKET,
