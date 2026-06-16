@@ -1,7 +1,9 @@
 from contextlib import closing
 from djevops.__main__ import init, deploy, getbackup
-from djevops.config import POSTGRES_DUMP_FILE, SQLITE_DB_FILE
+from djevops.config import POSTGRES_DUMP_FILE, SQLITE_DB_FILE, \
+    get_postgres_dump_path_on_s3
 from djevops.remote.actions import MANAGE_SH
+from djevops import s3
 from djevops.util import git, run_silently
 from os import remove
 from os.path import join
@@ -13,7 +15,7 @@ from test import hetzner
 from test.base import SystemTest
 from test.dnsimple import DNSimpleARecord
 from test.postgres import query_postgres_dump
-from test.s3 import delete_directory_from_s3, upload_file_to_s3
+from test.s3 import delete_directory_from_s3
 from test.util import commit, cd_to_temp_dir, write_pyproject_toml, \
     add_dep_to_pyproject_toml, wait_for_server_to_be_ready, wait_for_email
 from time import time, sleep, monotonic
@@ -147,6 +149,22 @@ class OnlineTest(SystemTest):
             }
 
     @classmethod
+    def _get_backup_config(cls, plain_secrets=True):
+        return {
+            'type': 's3',
+            'bucket': S3_BUCKET,
+            'access-key-id': \
+                S3_ACCESS_KEY if plain_secrets else 'S3_ACCESS_KEY',
+            'secret-access-key': \
+                S3_SECRET_KEY if plain_secrets else 'S3_SECRET_KEY',
+            'path': S3_DB_BACKUP_DIR,
+            'region': S3_REGION,
+            'endpoint': S3_ENDPOINT,
+            'force-path-style': True,
+            'sign-payload': True
+        }
+
+    @classmethod
     def _delete_remote_branch_if_exists(cls, name):
         try:
             git('push', 'origin', '--delete', name)
@@ -155,10 +173,7 @@ class OnlineTest(SystemTest):
 
     @classmethod
     def _delete_db_backups_from_s3(cls):
-        delete_directory_from_s3(
-            S3_REGION, S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET,
-            S3_DB_BACKUP_DIR
-        )
+        delete_directory_from_s3(cls._get_backup_config(), S3_DB_BACKUP_DIR)
 
     def tearDown(self):
         super().tearDown()
@@ -366,21 +381,6 @@ class OnlineTest(SystemTest):
         output = self._ssh(f'cat /var/log/{service_name}.log')
         self.assertIn(marker, output)
 
-    def _get_backup_config(self, plain_secrets=True):
-        return {
-            'type': 's3',
-            'bucket': S3_BUCKET,
-            'access-key-id': \
-                S3_ACCESS_KEY if plain_secrets else 'S3_ACCESS_KEY',
-            'secret-access-key': \
-                S3_SECRET_KEY if plain_secrets else 'S3_SECRET_KEY',
-            'path': S3_DB_BACKUP_DIR,
-            'region': S3_REGION,
-            'endpoint': S3_ENDPOINT,
-            'force-path-style': True,
-            'sign-payload': True
-        }
-
     def _configure_sqlite(self):
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['db'] = {'type': 'sqlite'}
@@ -436,10 +436,9 @@ class OnlineTest(SystemTest):
             dump_file = join(tmp_dir, 'db.sql')
             with open(dump_file, 'w') as f:
                 f.write(sql + ';\n')
-            upload_file_to_s3(
-                S3_REGION, S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET,
-                dump_file, join(S3_DB_BACKUP_DIR, POSTGRES_DUMP_FILE)
-            )
+            backup_config = self._get_backup_config()
+            remote_path = get_postgres_dump_path_on_s3(backup_config)
+            s3.upload(backup_config, dump_file, remote_path)
 
     def _execute_against_postgres_backup(self, sql):
         getbackup(QUIET, force=True)

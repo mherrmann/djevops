@@ -42,3 +42,6 @@ def interpolate_secrets(dict_, secrets):
         k: secrets.get(v, v)
         for k, v in dict_.items()
     }
+
+def get_postgres_dump_path_on_s3(backup_config):
+    return backup_config.get('path', '').strip('/') + '/' + POSTGRES_DUMP_FILE

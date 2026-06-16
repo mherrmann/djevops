@@ -92,6 +92,60 @@ can store backups in S3, Azure Blob Storage and many others. The keys you add to
 the `backup` element above get copied into a `replica` element in Litestream's
 config. For more information about the available options, please
 see [Litestream's documentation](https://litestream.io/reference/config/).
+
+For PostgreSQL (see below), backups instead use `pg_dump` and are uploaded to
+the same kind of `backup` destination once per minute.
+</details>
+
+<details>
+<summary>PostgreSQL</summary>
+
+Instead of SQLite, you can use PostgreSQL by setting `type` to `postgres`:
+
+```
+db:
+  type: postgres
+```
+
+You then configure the connection yourself in your `settings.py`:
+
+```
+import os
+
+DATABASES['default'] = {
+    'ENGINE': 'django.db.backends.postgresql',
+    'NAME': 'myapp',
+    'USER': 'myapp',
+    'PASSWORD': os.environ['DB_PASSWORD'],
+    'HOST': 'localhost',
+    'PORT': 5432,
+}
+```
+
+djevops reads these settings and installs PostgreSQL on the server, creating the
+database and user (with the password) you specified. Keep the password out of
+Git by storing it in `deploy/secrets.py` and referencing it as a `secret` in the
+service's environment:
+
+```
+services:
+  web:
+    type: django
+    env:
+      secret:
+        - DB_PASSWORD
+```
+
+You also need to add the `psycopg` driver to your `pyproject.toml`:
+
+```
+dependencies = [
+    ...
+    "psycopg[binary]",
+]
+```
+
+As with SQLite, you can add a `backup` element to enable automatic backups.
 </details>
 
 <details>

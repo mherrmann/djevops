@@ -1,7 +1,8 @@
 from argparse import ArgumentParser
-from djevops import GIT_HINT
+from djevops import GIT_HINT, s3
 from djevops.config import get_services_users_envs, get_django_service, \
-    interpolate_secrets, SQLITE_DB_FILE
+    interpolate_secrets, POSTGRES_DUMP_FILE, SQLITE_DB_FILE, \
+    get_postgres_dump_path_on_s3
 from djevops.litestream import get_litestream_config
 from djevops.remote.scaffold import STATE_DIR, DEPLOY_CONFIG_PATH, SECRETS_PATH
 from djevops.util import git, get_apt_install_cmd, prompt_yes_no, \
@@ -146,7 +147,10 @@ def deploy(quiet=False, dry_run=False):
 
 def getbackup(quiet=False, force=False):
     config, secrets = load_config()
-    output = basename(SQLITE_DB_FILE)
+    db = config.get('db') or {}
+    db_type = db.get('type', 'sqlite')
+    output = POSTGRES_DUMP_FILE if db_type == 'postgres' \
+        else basename(SQLITE_DB_FILE)
     if exists(output):
         if force:
             remove(output)
@@ -157,14 +161,28 @@ def getbackup(quiet=False, force=False):
                 return
         else:
             raise CommandError(f'{output} already exists. Please remove it.')
-    try:
-        backup = config['db']['backup']
-    except KeyError:
-        scp(f"root@{config['server']}:{SQLITE_DB_FILE}", output)
-    else:
+    backup = db.get('backup')
+    if db_type == 'postgres':
+        if backup:
+            backup_config = interpolate_secrets(backup, secrets)
+            remote_path = get_postgres_dump_path_on_s3(backup_config)
+            if not s3.download(backup_config, output, remote_path):
+                raise CommandError('No database backup found.')
+        else:
+            _dump_remote_postgres(config['server'], output)
+    elif backup:
         _restore_with_litestream(backup, secrets, output)
+    else:
+        scp(f"root@{config['server']}:{SQLITE_DB_FILE}", output)
     if not quiet:
         print(f'Downloaded backup to {output}')
+
+def _dump_remote_postgres(server, output):
+    remote_cmd = '/opt/djevops/.venv/bin/python -m djevops.remote.postgres dump'
+    ssh_cmd = get_ssh_command()
+    with open(output, 'w') as f:
+        run(f'{ssh_cmd} root@{server} {quote(remote_cmd)}', shell=True,
+            stdout=f, check=True)
 
 def _restore_with_litestream(backup, secrets, output):
     if not which('litestream'):

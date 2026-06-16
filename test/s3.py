@@ -1,32 +1,9 @@
-from botocore.config import Config
+from djevops.s3 import get_client
 
-import boto3
-
-def delete_directory_from_s3(
-    region, endpoint, access_key, secret_key, bucket, prefix
-):
-    client = _get_client(region, endpoint, access_key, secret_key)
+def delete_directory_from_s3(config, prefix):
+    client = get_client(config)
+    bucket = config['bucket']
     paginator = client.get_paginator('list_objects_v2')
     for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
         objects = [{'Key': obj['Key']} for obj in page.get('Contents', [])]
         client.delete_objects(Bucket=bucket, Delete={'Objects': objects})
-
-def upload_file_to_s3(
-    region, endpoint, access_key, secret_key, bucket, local_path, key
-):
-    client = _get_client(region, endpoint, access_key, secret_key)
-    client.upload_file(local_path, bucket, key)
-
-def _get_client(region, endpoint, access_key, secret_key):
-    config = Config(s3={
-        'addressing_style': 'path',
-        'payload_signing_enabled': True
-    })
-    return boto3.client(
-        's3',
-        region_name=region,
-        endpoint_url='https://' + endpoint,
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        config=config
-    )
