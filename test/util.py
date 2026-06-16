@@ -40,7 +40,7 @@ def add_dep_to_pyproject_toml(dep):
         tomli_w.dump(pyproject, f)
 
 def wait_for_server_to_be_ready(
-    user, host, ssh_key_path, known_hosts_file, timeout_secs=60
+    user, host, ssh_key_path, known_hosts_file, timeout_secs=90
 ):
     end_time = monotonic() + timeout_secs
     while monotonic() < end_time:
