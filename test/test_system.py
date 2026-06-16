@@ -11,7 +11,8 @@ from hcloud._exceptions import APIException
 from hcloud.images import Image
 from hcloud.server_types import ServerType
 from imaplib import IMAP4_SSL
-from os import chdir, remove
+from os import chdir, makedirs, remove
+from os.path import join
 from pathlib import Path
 from shlex import quote
 from subprocess import DEVNULL, run, CalledProcessError
@@ -229,6 +230,15 @@ class OfflineTest(_DjevopsTest):
         expect_deploy_to_succeed()
 
         with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['db'] = None
+
+        self.expect_deploy_error(
+            "Please remove the `db` section in deploy/djevops.yml or set its "
+            "`type` key to `sqlite` or `postgres`. For example:\n"
+            "    db:\n"
+            "      type: sqlite"
+        )
+        with self.update_deploy_yml() as deploy_yml:
             deploy_yml['db'] = {'type': 'sqlite'}
 
         self.expect_deploy_error(
@@ -245,6 +255,14 @@ class OfflineTest(_DjevopsTest):
         ])
 
         expect_deploy_to_succeed()
+
+        with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['db'] = {'type': 'postgres'}
+        self.expect_deploy_error(
+            f"Please set DATABASES['default']['ENGINE'] in "
+            f"{self.SETTINGS_PY_RELPATH} to 'django.db.backends.postgresql'.\n\n"
+            f"Don't forget to commit *and push* your changes to Git."
+        )
 
 
 class OnlineTest(_DjevopsTest):

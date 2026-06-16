@@ -223,13 +223,23 @@ def check_config(deploy_config, secrets):
     user_envs = get_services_users_envs(deploy_config, secrets)
     django_env = user_envs[django_service_name][1]
 
-    has_db = bool(deploy_config.get('db'))
+    if 'db' in deploy_config:
+        db_type = (deploy_config['db'] or {}).get('type')
+        if db_type not in ('sqlite', 'postgres'):
+            raise CommandError(
+                'Please remove the `db` section in deploy/djevops.yml or set '
+                'its `type` key to `sqlite` or `postgres`. For example:\n'
+                '    db:\n'
+                '      type: sqlite'
+            )
+    else:
+        db_type = None
 
     # Ensure `djevops.check_django_settings` is loadable:
     django_shell_env = django_env | {'PYTHONPATH': ':'.join(sys.path)}
     error_msg = run_in_django_shell([
         'from djevops.check_django_settings import main',
-        f'main({server_ip!r}, {has_db})',
+        f'main({server_ip!r}, {db_type!r})',
     ], env=django_shell_env)
     if error_msg:
         raise CommandError(error_msg)

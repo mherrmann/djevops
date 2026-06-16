@@ -7,11 +7,11 @@ import sys
 
 SETTINGS_PY = settings.SETTINGS_MODULE.replace('.', '/') + '.py'
 
-def main(server_ip, has_db):
+def main(server_ip, db_type):
     check_allowed_hosts(server_ip)
     check_staticfiles()
-    if has_db:
-        check_databases()
+    if db_type:
+        check_databases(db_type)
 
 def check_staticfiles():
     if 'django.contrib.staticfiles' in settings.INSTALLED_APPS:
@@ -48,7 +48,21 @@ def check_allowed_hosts(server_ip):
                 f'supported, sorry: {host!r}'
             )
 
-def check_databases():
+def check_databases(db_type):
+    if db_type == 'postgres':
+        check_postgres()
+    else:
+        check_sqlite()
+
+def check_postgres():
+    default = settings.DATABASES['default']
+    if default.get('ENGINE') != 'django.db.backends.postgresql':
+        error(
+            f"Please set DATABASES['default']['ENGINE'] in {SETTINGS_PY} to "
+            f"'django.db.backends.postgresql'."
+        )
+
+def check_sqlite():
     if settings.DATABASES['default']['NAME'] != os.environ['SQLITE_DB_FILE']:
         error(
             f"Please set DATABASES['default']['NAME'] in {SETTINGS_PY} to the "
