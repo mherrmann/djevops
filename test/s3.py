@@ -11,6 +11,12 @@ def delete_directory_from_s3(
         objects = [{'Key': obj['Key']} for obj in page.get('Contents', [])]
         client.delete_objects(Bucket=bucket, Delete={'Objects': objects})
 
+def upload_file_to_s3(
+    region, endpoint, access_key, secret_key, bucket, local_path, key
+):
+    client = _get_client(region, endpoint, access_key, secret_key)
+    client.upload_file(local_path, bucket, key)
+
 def _get_client(region, endpoint, access_key, secret_key):
     config = Config(s3={
         'addressing_style': 'path',

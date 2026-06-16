@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [{name = "Michael Herrmann"}]
-dependencies = ["PyYAML==6.0.3"]
+dependencies = ["boto3", "PyYAML==6.0.3"]
 
 [project.scripts]
 djevops = "djevops.__main__:main"
@@ -22,6 +22,7 @@ test = [
     "django==5.1.2",
     "dnsimple==2.15.0",
     "hcloud==2.13.0",
+    "psycopg[binary]",
     "requests==2.32.5",
     "tomli-w==1.2.0",
 ]

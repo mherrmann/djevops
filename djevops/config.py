@@ -1,5 +1,7 @@
 SQLITE_DB_FILE = '/var/lib/djevops/db.sqlite3'
 
+POSTGRES_DUMP_FILE = 'db.sql'
+
 DEFAULT_ENV = {
     'SQLITE_DB_FILE': SQLITE_DB_FILE,
     'STATIC_ROOT': '/srv/static',
