@@ -46,6 +46,7 @@ IMAP_HOST = os.environ['IMAP_HOST']
 EMAIL_USER = os.environ['EMAIL_USER']
 EMAIL_PASSWORD = os.environ['EMAIL_PASSWORD']
 
+MB = 2 ** 20
 
 class OnlineTest(SystemTest):
 
@@ -185,6 +186,18 @@ class OnlineTest(SystemTest):
         response = requests.get(f'http://{self.server_ip}')
         self.assertEqual(response.status_code, 200)
         self.assertIn('The install worked', response.text)
+
+    def test_exceed_upload_size(self):
+        # This test checks whether djevops forwards Django setting
+        # DATA_UPLOAD_MAX_MEMORY_SIZE to Nginx as client_max_body_size. It
+        # exploits the fact that Nginx's default upload limit is 1 MB while
+        # Django's is 2.5 MB. A 2 MB upload should therefore go through if and
+        # only if djevops did forward the Django setting to Nginx.
+        deploy(self.QUIET)
+        response = requests.post(
+            f'http://{self.server_ip}', data=b'x' * (2 * MB)
+        )
+        self.assertEqual(200, response.status_code)
 
     def test_ssl(self):
         self.add_to_settings([

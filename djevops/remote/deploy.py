@@ -11,7 +11,8 @@ from djevops.litestream import get_litestream_config
 from djevops.remote import postgres
 from djevops.remote.actions import install_python_deps, migrate_db, \
     collect_static_files, get_django_setting
-from djevops.remote.nginx import get_header_name_from_meta_key
+from djevops.remote.nginx import get_header_name_from_meta_key, \
+    get_nginx_size_from_bytes
 from djevops.remote.scaffold import DJEVOPS_PYTHON, get_deploy_config, \
     get_secrets
 from djevops.remote.util import chown, ensure_group_exists, run as _run, \
@@ -122,6 +123,9 @@ def main():
                 if is_domain(host)
             ]
             replacements = {
+                '$CLIENT_MAX_BODY_SIZE': get_nginx_size_from_bytes(
+                    get_django_setting('DATA_UPLOAD_MAX_MEMORY_SIZE', env)
+                ),
                 '$SERVER_NAME': ' '.join(domains) or server_ip,
                 '$SERVICE': service_name,
                 '$USER': user,
