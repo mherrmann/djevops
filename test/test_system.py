@@ -187,12 +187,21 @@ class OnlineTest(SystemTest):
         self.assertIn('The install worked', response.text)
 
     def test_ssl(self):
+        self.add_to_settings([
+            "SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')",
+            "SECURE_SSL_REDIRECT = True"
+        ])
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['services']['web']['env']['clear']['ALLOWED_HOSTS'] += \
                 f' {self.server_hostname}'
+        git('push')
         deploy(self.QUIET)
-        response = requests.get(f'https://{self.server_hostname}')
-        self.assertEqual(response.status_code, 200)
+        response = requests.get(
+            f'https://{self.server_hostname}', allow_redirects=False
+        )
+        # If you get HTTP 301 here, then djevops didn't wire
+        # SECURE_PROXY_SSL_HEADER into the Nginx config.
+        self.assertEqual(200, response.status_code)
         self.assertIn('The install worked', response.text)
 
     def test_sqlite_backup(self):

@@ -18,7 +18,7 @@ server {
 
     location / {
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-Protocol $scheme;
+        $PROXY_SSL_HEADER
         proxy_set_header Host $host;
         proxy_redirect off;
         if (!-f $request_filename) {

@@ -11,6 +11,7 @@ from djevops.litestream import get_litestream_config
 from djevops.remote import postgres
 from djevops.remote.actions import install_python_deps, migrate_db, \
     collect_static_files, get_django_setting
+from djevops.remote.nginx import get_header_name_from_meta_key
 from djevops.remote.scaffold import DJEVOPS_PYTHON, get_deploy_config, \
     get_secrets
 from djevops.remote.util import chown, ensure_group_exists, run as _run, \
@@ -120,13 +121,21 @@ def main():
                 host for host in get_django_setting('ALLOWED_HOSTS', env)
                 if is_domain(host)
             ]
+            replacements = {
+                '$SERVER_NAME': ' '.join(domains) or server_ip,
+                '$SERVICE': service_name,
+                '$USER': user,
+                '$PROXY_SSL_HEADER': '',
+            }
+            ssl_header_tpl = get_django_setting('SECURE_PROXY_SSL_HEADER', env)
+            if ssl_header_tpl:
+                header_name = get_header_name_from_meta_key(ssl_header_tpl[0])
+                replacements['$PROXY_SSL_HEADER'] = \
+                    f'proxy_set_header {header_name} $scheme;'
             require(NginxSite(
                 service_name,
                 '/opt/djevops/conf/nginx/django',
-                {
-                    '$SERVER_NAME': ' '.join(domains) or server_ip,
-                    '$SERVICE': service_name,
-                }
+                replacements
             ))
             # Placeholder until Certbot runs. Create it only if absent so we
             # don't clobber the ssl config Certbot's TemplatedFile writes below.
