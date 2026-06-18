@@ -18,7 +18,7 @@ repository. You get a config file that looks similar to the following:
 server: 1.2.3.4
 
 git:
-  repo: githubuser/reponame
+  repo: githubuser/mydjangoapp
   branch: main
 
 services:
@@ -173,7 +173,7 @@ services:
 ```
 
 To install Redis on the server (which many Django apps use as Celery's backend),
-add an empty `redis` block:
+add an empty top-level `redis` block:
 
 ```
 redis:
