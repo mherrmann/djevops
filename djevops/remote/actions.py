@@ -1,17 +1,19 @@
 from djevops.config import get_services_users_envs, get_django_service
 from djevops.remote.scaffold import get_deploy_config, get_secrets
 from djevops.util import run_in_django_shell, run_silently
+from os.path import exists
 
 import json
 
 MANAGE_SH = '/opt/djevops/bin/manage.sh'
 
 def install_python_deps():
-    run_silently(
-        'cd /srv/app && UV_PROJECT_ENVIRONMENT=/srv/venv '
-        'uv sync -q --no-install-project',
-        shell=True
-    )
+    if exists('/srv/app/pyproject.toml'):
+        cmd = 'UV_PROJECT_ENVIRONMENT=/srv/venv uv sync -q --no-install-project'
+    else:
+        cmd = 'uv pip install -q --python /srv/venv/bin/python -r ' \
+              'requirements.txt'
+    run_silently(f'cd /srv/app && {cmd}', shell=True)
 
 def migrate_db():
     _run_manage_sh('migrate')

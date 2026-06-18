@@ -3,7 +3,7 @@ from djevops.util import git
 from os import remove
 from test.base import SystemTest
 from test.util import cd_to_temp_dir, write_pyproject_toml, \
-    add_dep_to_pyproject_toml
+    add_dep_to_pyproject_toml, write_requirements_txt
 
 import django
 
@@ -34,8 +34,8 @@ class OfflineTest(SystemTest):
         self.start_django_project()
 
         self.expect_init_error(
-            "Please create a pyproject.toml file. Don't forget to commit *and "
-            "push* your changes to Git."
+            "Please create a pyproject.toml or requirements.txt file. Don't "
+            "forget to commit *and push* your changes to Git."
         )
         write_pyproject_toml()
 
@@ -51,6 +51,37 @@ class OfflineTest(SystemTest):
             "Git."
         )
         add_dep_to_pyproject_toml(f'gunicorn=={self.GUNICORN_VERSION}')
+
+        git('add', '.')
+        git('commit', '-m', 'Initial commit')
+
+        init(quiet=True)
+
+    def test_init_with_requirements_txt(self):
+        git('init', '-q')
+        git('remote', 'add', 'origin', 'https://example.com/repo.git')
+        self.start_django_project()
+
+        self.expect_init_error(
+            "Please create a pyproject.toml or requirements.txt file. Don't "
+            "forget to commit *and push* your changes to Git."
+        )
+        write_requirements_txt([])
+
+        self.expect_init_error(
+            "Please add `django` to requirements.txt. Don't forget to commit "
+            "*and push* your changes to Git."
+        )
+        write_requirements_txt([f'Django=={django.get_version()}'])
+
+        self.expect_init_error(
+            "Please add `gunicorn` to requirements.txt. Don't forget to commit "
+            "*and push* your changes to Git."
+        )
+        write_requirements_txt([
+            f'Django=={django.get_version()}',
+            f'gunicorn=={self.GUNICORN_VERSION}',
+        ])
 
         git('add', '.')
         git('commit', '-m', 'Initial commit')

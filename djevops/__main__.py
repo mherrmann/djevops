@@ -68,17 +68,16 @@ def init(quiet=False):
             "There is no manage.py file in the current directory. If you add "
             "one, don't forget to commit *and push* your changes to Git."
         )
-    if not exists('pyproject.toml'):
-        raise CommandError('Please create a pyproject.toml file. ' + GIT_HINT)
-    with open('pyproject.toml', 'rb') as f:
-        pyproject = tomllib.load(f)
-    deps = pyproject.get('project', {}).get('dependencies', [])
+    deps = _get_declared_dependencies()
+    if deps is None:
+        raise CommandError(
+            'Please create a pyproject.toml or requirements.txt file. '
+            + GIT_HINT
+        )
+    deps, location = deps
     for dep in ('django', 'gunicorn'):
         if not any(re.match(rf'{dep}\b', d, re.IGNORECASE) for d in deps):
-            raise CommandError(
-                f'Please add `{dep}` to [project.dependencies] in '
-                f'pyproject.toml. ' + GIT_HINT
-            )
+            raise CommandError(f'Please add `{dep}` to {location}. ' + GIT_HINT)
     remote = remotes[0]
     remote_url = git('remote', 'get-url', remote)
     if remote_url.startswith('https://'):
@@ -119,6 +118,23 @@ def init(quiet=False):
         print('Created deploy/djevops.yml')
         print('Created deploy/secrets.py')
         print(f'To deploy your Django app to a server, run: djevops deploy')
+
+def _get_declared_dependencies():
+    if exists('pyproject.toml'):
+        with open('pyproject.toml', 'rb') as f:
+            pyproject = tomllib.load(f)
+        deps = pyproject.get('project', {}).get('dependencies', [])
+        return deps, '[project.dependencies] in pyproject.toml'
+    try:
+        with open('requirements.txt') as f:
+            result = []
+            for line in f:
+                line = re.sub(r'(^|\s)#.*$', '', line).strip()
+                if line and not line.startswith('-'):
+                    result.append(line)
+            return result, 'requirements.txt'
+    except FileNotFoundError:
+        return None
 
 def deploy(quiet=False, dry_run=False):
     config, secrets = load_config()

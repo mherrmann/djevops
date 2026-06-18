@@ -143,14 +143,8 @@ services:
         - DB_PASSWORD
 ```
 
-You also need to add the `psycopg` driver to your `pyproject.toml`:
-
-```
-dependencies = [
-    ...
-    "psycopg[binary]",
-]
-```
+You also need to add `psycopg[binary]` to your `pyproject.toml` or
+`requirements.txt` file.
 
 As with SQLite, you can add a `backup` element to enable automatic backups. By
 default, PostgreSQL backups are taken once per day. You can customize this by

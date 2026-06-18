@@ -39,6 +39,11 @@ def add_dep_to_pyproject_toml(dep):
     with open('pyproject.toml', 'wb') as f:
         tomli_w.dump(pyproject, f)
 
+def write_requirements_txt(deps):
+    with open('requirements.txt', 'w') as f:
+        for dep in deps:
+            f.write(dep + '\n')
+
 def wait_for_server_to_be_ready(
     user, host, ssh_key_path, known_hosts_file, timeout_secs=90
 ):
