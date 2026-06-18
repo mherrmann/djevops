@@ -1,8 +1,12 @@
 # djevops: Self-host Django easily
 
-djevops is a command-line tool for deploying Django web apps to Linux VPSs.
-Unlike other tools, djevops runs Django without Docker. This makes
-development faster and easier.
+djevops is a command-line tool for deploying your Django web app to a single
+Linux VPS. It runs all necessary components (database, Redis, etc.) on your
+server.
+
+Unlike other tools, djevops does not use Docker. This lets you "push to prod" in
+seconds. Compared to Ansible, djevops' specialization on Django requires you to
+write significantly less code. The flip side is that djevops is less general.
 
 To get started with djevops, all you need is SSH root access to a Linux VPS
 running Ubuntu or Debian. Install djevops on your local machine with
@@ -119,14 +123,13 @@ DATABASES['default'] = {
     'NAME': 'myapp',
     'USER': 'myapp',
     'PASSWORD': os.environ['DB_PASSWORD'],
-    'HOST': 'localhost',
-    'PORT': 5432,
+    'HOST': 'localhost'
 }
 ```
 
 djevops reads these settings and installs PostgreSQL on the server, creating the
-database and user (with the password) you specified. Keep the password out of
-Git by storing it in `deploy/secrets.py`. For example:
+database and user with the password you specified. Keep the password out of Git
+by storing it in `deploy/secrets.py`. For example:
 
 ```
 DB_PASSWORD = "<some strong password>"
