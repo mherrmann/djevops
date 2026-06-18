@@ -3,6 +3,7 @@ from djevops.remote.util import chown, ensure_group_exists, \
 from djevops.util import copy_with_replace, get_apt_install_cmd
 from os import chmod, makedirs, remove
 from os.path import exists, expanduser, join
+from shlex import quote
 from shutil import rmtree
 from urllib.request import urlretrieve
 
@@ -152,7 +153,7 @@ class ServiceUser(Component):
     @property
     def _bashrc_contents(self):
         return '\n'.join(
-            f'export {key}="{value}"' for key, value in self.env.items()
+            f'export {key}={quote(value)}' for key, value in self.env.items()
         )
 
     def __str__(self):
