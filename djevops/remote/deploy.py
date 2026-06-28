@@ -188,7 +188,6 @@ def main():
             require(LetsEncryptCertificate(service_name, domains))
 
     if config.get('mail'):
-        log('Installing iptables-persistent...')
         debconf_set_selections(
             'iptables-persistent iptables-persistent/autosave_v4 boolean true'
         )
@@ -202,7 +201,6 @@ def main():
             reject=['-p tcp --dport 25'],
         ))
 
-        log('Installing Postfix...')
         if primary_domain:
             debconf_set_selections(
                 f'postfix postfix/mailname string {primary_domain}'
