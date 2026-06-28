@@ -286,7 +286,8 @@ def main():
         if service_name in updated_services:
             continue
         service = services[service_name]
-        if service['type'] == 'django' and user not in changed_bashrcs:
+        if service['type'] in ('django', 'celery') and \
+            user not in changed_bashrcs:
             try:
                 _run(['supervisorctl', 'signal', 'HUP', service_name])
             except CalledProcessError as e:
