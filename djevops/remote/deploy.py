@@ -96,6 +96,7 @@ def main():
     primary_domain = ''
     admin_email = ''
     service_domains = {}
+    beat_programs = []
     services_users_envs = get_services_users_envs(config, secrets)
     changed_bashrcs = set()
     services = config['services']
@@ -156,7 +157,7 @@ def main():
         elif service['type'] in ('celery', 'command'):
             supervisor_conf_file = 'command.conf'
             if service['type'] == 'celery':
-                command = f'/opt/djevops/bin/celery.sh {service_name}'
+                command = f'/opt/djevops/bin/celery.sh {service_name} worker'
             else:
                 command = service['command']
             replacements['$COMMAND'] = quote(command)
@@ -172,6 +173,28 @@ def main():
             '/opt/djevops/conf/logrotate/service',
             replacements
         ))
+        if service['type'] == 'celery':
+            # Beat gets its own program. Celery can run it inside the worker,
+            # but then nothing supervises it: when Beat dies, the worker stays
+            # up and scheduled tasks silently stop running.
+            beat_name = f'{service_name}-beat'
+            beat_programs.append(beat_name)
+            require(TemplatedFile(
+                f'/etc/supervisor/conf.d/{beat_name}.conf',
+                '/opt/djevops/conf/supervisor/command.conf',
+                {
+                    '$SERVICE': beat_name,
+                    '$USER': user,
+                    '$COMMAND': quote(
+                        f'/opt/djevops/bin/celery.sh {service_name} beat'
+                    ),
+                }
+            ))
+            require(TemplatedFile(
+                f'/etc/logrotate.d/{beat_name}',
+                '/opt/djevops/conf/logrotate/service',
+                {'$SERVICE': beat_name, '$USER': user}
+            ))
 
     # Make a self-signed certificate just so we can serve SSL for requests with
     # incorrect host names.
@@ -297,6 +320,11 @@ def main():
                 _run_silently(['supervisorctl', 'start', service_name])
         else:
             _run_silently(['supervisorctl', 'restart', service_name])
+    # Beat does not handle SIGHUP. It has no work in flight, so restarting it
+    # outright is quick.
+    for beat_name in beat_programs:
+        if beat_name not in updated_services:
+            _run_silently(['supervisorctl', 'restart', beat_name])
     # This loop should not run forever because we supply `startsecs` in the
     # supervisor config file.
     while True:
@@ -308,13 +336,14 @@ def main():
     supervisor_status = {}
     for line in supervisor_status_str.splitlines():
         parts = line.split()
-        supervisor_status[parts[0]] = parts[1]
+        supervisor_status[parts[0]] = (parts[1], line)
     any_service_failed = False
-    for service_name in services:
-        if supervisor_status[service_name] != 'RUNNING':
+    for program in list(services) + beat_programs:
+        state, status_line = supervisor_status[program]
+        if state != 'RUNNING':
             any_service_failed = True
-            print('\n' + line)
-            log_file = f'/var/log/{service_name}.log'
+            print('\n' + status_line)
+            log_file = f'/var/log/{program}.log'
             with open(log_file) as f:
                 print(f.read().rstrip())
     if any_service_failed:

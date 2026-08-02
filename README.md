@@ -181,7 +181,8 @@ redis:
 
 This setup lets you run Python functions asynchronously and on a schedule such
 as "every five hours". The service of type `celery` also runs the necessary
-`beat` scheduler.
+`beat` scheduler. Beat gets its own supervised process, so it is restarted when
+it crashes. Its log file is `/var/log/<service>-beat.log`.
 </details>
 
 <details>

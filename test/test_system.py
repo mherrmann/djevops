@@ -382,6 +382,11 @@ class OnlineTest(SystemTest):
         output = self._execute_remote_django_shell(run_task_script, 'web')
         self.assertIn('celery works', output)
 
+        # Beat must be its own supervised process. When it runs inside the
+        # worker, nothing restarts it and scheduled tasks silently stop.
+        beat_status = self._ssh('supervisorctl status celery-beat || true')
+        self.assertIn('RUNNING', beat_status)
+
     def test_command(self):
         service_name = 'mycmd'
         marker = f'command-works-{self.test_name}'
