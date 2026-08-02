@@ -341,7 +341,13 @@ class OnlineTest(SystemTest):
 
         self.add_to_settings([
             f"CELERY_BROKER_URL = 'redis://localhost'",
-            f"CELERY_RESULT_BACKEND = 'redis://localhost'"
+            f"CELERY_RESULT_BACKEND = 'redis://localhost'",
+            "CELERY_BEAT_SCHEDULE = {",
+            "    'beat-check': {",
+            f"        'task': '{self.DJANGO_APP_NAME}.tasks.beat_task',",
+            "        'schedule': 5.0,",
+            "    },",
+            "}",
         ])
 
         proj = self.DJANGO_PROJECT_NAME
@@ -362,25 +368,28 @@ class OnlineTest(SystemTest):
         init_py.write_text('from .celery import app as celery_app')
         commit(init_py, 'Add __init__.py')
 
+        marker = f'beat-works-{self.test_name}'
         tasks_py = Path(self.DJANGO_APP_NAME) / 'tasks.py'
         tasks_py.write_text('\n'.join([
             'from celery import shared_task',
             '@shared_task',
-            'def test_task():',
-            "    return 'celery works'",
+            'def beat_task():',
+            f"    return {marker!r}",
         ]))
         commit(tasks_py, 'Add celery task')
 
         git('push')
         deploy(self.QUIET)
 
-        run_task_script = [
-            f'from {self.DJANGO_APP_NAME}.tasks import test_task',
-            'result = test_task.delay()',
-            'print(result.get(timeout=10))'
-        ]
-        output = self._execute_remote_django_shell(run_task_script, 'web')
-        self.assertIn('celery works', output)
+        self.assertIn('RUNNING', self._ssh('supervisorctl status celery-beat'))
+
+        end_time = monotonic() + 30
+        while monotonic() < end_time:
+            if marker in self._ssh('cat /var/log/celery.log'):
+                break
+            sleep(1)
+        else:
+            self.fail('Celery Beat task did not run')
 
     def test_command(self):
         service_name = 'mycmd'

@@ -98,12 +98,30 @@ def main():
     service_domains = {}
     services_users_envs = get_services_users_envs(config, secrets)
     changed_bashrcs = set()
+    programs = []
     services = config['services']
     for service_name, (user, env) in services_users_envs.items():
+        def require_program(
+            name, supervisor_conf, command=None, hup_eligible=False
+        ):
+            replacements = {'$SERVICE': name, '$USER': user}
+            if command is not None:
+                replacements['$COMMAND'] = quote(command)
+            require(TemplatedFile(
+                f'/etc/supervisor/conf.d/{name}.conf',
+                f'/opt/djevops/conf/supervisor/{supervisor_conf}',
+                replacements
+            ))
+            require(TemplatedFile(
+                f'/etc/logrotate.d/{name}',
+                '/opt/djevops/conf/logrotate/service',
+                replacements
+            ))
+            programs.append((name, user, hup_eligible))
+
         if require(ServiceUser(user, env, django_group)):
             changed_bashrcs.add(user)
         service = services[service_name]
-        replacements = {'$SERVICE': service_name, '$USER': user}
         if service['type'] == 'django':
             if not primary_domain:
                 for host in get_django_setting('ALLOWED_HOSTS', env):
@@ -117,7 +135,6 @@ def main():
                     admin_email = admins[0]
                     if not isinstance(admin_email, str):
                         admin_email = admin_email[1]
-            supervisor_conf_file = 'gunicorn.conf'
             domains = [
                 host for host in get_django_setting('ALLOWED_HOSTS', env)
                 if is_domain(host)
@@ -153,25 +170,22 @@ def main():
             ))
             if domains:
                 service_domains[service_name] = domains[:]
-        elif service['type'] in ('celery', 'command'):
-            supervisor_conf_file = 'command.conf'
-            if service['type'] == 'celery':
-                command = f'/opt/djevops/bin/celery.sh {service_name}'
-            else:
-                command = service['command']
-            replacements['$COMMAND'] = quote(command)
+            require_program(service_name, 'gunicorn.conf', hup_eligible=True)
+        elif service['type'] == 'celery':
+            # Run the worker and Beat as separate supervised programs instead of
+            # one embedded process (`celery worker -B`), so that a Beat crash
+            # can't wedge the worker and the two never contend over the schedule
+            # file.
+            for program, subcommand in (
+                (service_name, 'worker'), (f'{service_name}-beat', 'beat')
+            ):
+                command = \
+                    f'/opt/djevops/bin/celery.sh {service_name} {subcommand}'
+                require_program(program, 'command.conf', command)
+        elif service['type'] == 'command':
+            require_program(service_name, 'command.conf', service['command'])
         else:
             error(f"Unknown service type: {service['type']}")
-        require(TemplatedFile(
-            f'/etc/supervisor/conf.d/{service_name}.conf',
-            f'/opt/djevops/conf/supervisor/{supervisor_conf_file}',
-            replacements
-        ))
-        require(TemplatedFile(
-            f'/etc/logrotate.d/{service_name}',
-            '/opt/djevops/conf/logrotate/service',
-            replacements
-        ))
 
     # Make a self-signed certificate just so we can serve SSL for requests with
     # incorrect host names.
@@ -281,22 +295,20 @@ def main():
         parts = line.split(': ', 1)
         assert len(parts) == 2, line
         updated_services.add(parts[0])
-    # Restart those services that were not already handled by `update`:
-    for service_name, (user, env) in services_users_envs.items():
-        if service_name in updated_services:
+    # Restart those programs that were not already handled by `update`:
+    for program_name, user, hup_eligible in programs:
+        if program_name in updated_services:
             continue
-        service = services[service_name]
-        if service['type'] in ('django', 'celery') and \
-            user not in changed_bashrcs:
+        if hup_eligible and user not in changed_bashrcs:
             try:
-                _run(['supervisorctl', 'signal', 'HUP', service_name])
+                _run(['supervisorctl', 'signal', 'HUP', program_name])
             except CalledProcessError as e:
                 if e.returncode != 7:
                     raise
                 # The service wasn't running.
-                _run_silently(['supervisorctl', 'start', service_name])
+                _run_silently(['supervisorctl', 'start', program_name])
         else:
-            _run_silently(['supervisorctl', 'restart', service_name])
+            _run_silently(['supervisorctl', 'restart', program_name])
     # This loop should not run forever because we supply `startsecs` in the
     # supervisor config file.
     while True:
@@ -310,11 +322,11 @@ def main():
         parts = line.split()
         supervisor_status[parts[0]] = parts[1]
     any_service_failed = False
-    for service_name in services:
-        if supervisor_status[service_name] != 'RUNNING':
+    for program_name, user, hup_eligible in programs:
+        if supervisor_status.get(program_name) != 'RUNNING':
             any_service_failed = True
             print('\n' + line)
-            log_file = f'/var/log/{service_name}.log'
+            log_file = f'/var/log/{program_name}.log'
             with open(log_file) as f:
                 print(f.read().rstrip())
     if any_service_failed:
