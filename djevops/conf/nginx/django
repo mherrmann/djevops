@@ -14,6 +14,19 @@ server {
 
     client_max_body_size $CLIENT_MAX_BODY_SIZE;
 
+    gzip on;
+    # Let caches key on Accept-Encoding:
+    gzip_vary on;
+    # Also compress responses proxied from the Django app, not just static
+    # files. Without this, nginx would not compress anything from Django:
+    gzip_proxied any;
+    # Don't bother compressing tiny responses. (Nginx's default 20 is too low.)
+    gzip_min_length 256;
+    gzip_comp_level 5;
+    # text/html is always compressed, so it is not listed here:
+    gzip_types application/json application/javascript text/css image/svg+xml
+               text/plain application/xml;
+
     location /static/ {
         alias /srv/static/;
     }
