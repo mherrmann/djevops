@@ -1,21 +1,23 @@
 from djevops.remote.util import chown, ensure_group_exists, \
     ensure_user_exists, run as _run, symlink_force
 from djevops.util import copy_with_replace, get_apt_install_cmd
+from hashlib import sha256
 from os import chmod, makedirs, remove
 from os.path import exists, expanduser, join
 from shlex import quote
 from shutil import rmtree
 from urllib.request import urlretrieve
 
+import json
+
 class Component:
+
+    def __init__(self, source_files=()):
+        self.source_files = source_files
 
     @property
     def key(self):
         return None
-
-    @property
-    def args(self):
-        return self.__dict__
 
     def install(self):
         raise NotImplementedError
@@ -23,10 +25,19 @@ class Component:
     def uninstall(self):
         raise NotImplementedError
 
+    def calculate_hash(self):
+        hash = sha256()
+        hash.update(json.dumps(vars(self), sort_keys=True).encode())
+        for path in self.source_files:
+            with open(path, 'rb') as f:
+                hash.update(f.read())
+        return hash.hexdigest()
+
 
 class AptPackage(Component):
 
     def __init__(self, name):
+        super().__init__()
         self.name = name
 
     def install(self):
@@ -46,6 +57,7 @@ class AptPackage(Component):
 class SshKey(Component):
 
     def __init__(self, contents):
+        super().__init__()
         self.contents = contents
 
     def install(self):
@@ -73,6 +85,7 @@ class SshKey(Component):
 class KnownHostsEntry(Component):
 
     def __init__(self, host):
+        super().__init__()
         self.host = host
 
     def install(self):
@@ -97,6 +110,7 @@ class KnownHostsEntry(Component):
 class VirtualEnvironment(Component):
 
     def __init__(self, path):
+        super().__init__()
         self.path = path
 
     def install(self):
@@ -115,7 +129,10 @@ class VirtualEnvironment(Component):
 
 class ServiceUser(Component):
 
+    BASH_PROFILE_PATH = '/opt/djevops/conf/.bash_profile'
+
     def __init__(self, user, env, group):
+        super().__init__((self.BASH_PROFILE_PATH,))
         self.user = user
         self.env = env
         self.group = group
@@ -128,7 +145,7 @@ class ServiceUser(Component):
         chown(self._home_dir, self.user, self.user)
         chmod(self._home_dir, 0o700)
         symlink_force(
-            '/opt/djevops/conf/.bash_profile', f'{self._home_dir}/.bash_profile'
+            self.BASH_PROFILE_PATH, f'{self._home_dir}/.bash_profile'
         )
         with open(self._bashrc_path, 'w') as f:
             f.write(self._bashrc_contents)
@@ -163,6 +180,7 @@ class ServiceUser(Component):
 class SelfSignedCertificate(Component):
 
     def __init__(self, directory, common_name):
+        super().__init__()
         self.directory = directory
         self.common_name = common_name
 
@@ -221,6 +239,7 @@ class Litestream(Component):
 class Hostname(Component):
 
     def __init__(self, name):
+        super().__init__()
         self.name = name
 
     def install(self):
@@ -238,6 +257,7 @@ class LetsEncryptRegistration(Component):
     ACCOUNTS_DIR = '/etc/letsencrypt/accounts'
 
     def __init__(self, email=''):
+        super().__init__()
         self.email = email
 
     def install(self):
@@ -261,7 +281,10 @@ class LetsEncryptRegistration(Component):
 
 class LetsEncryptCertificate(Component):
 
+    SSL_CONFIG_FILE = '/opt/djevops/conf/nginx/ssl'
+
     def __init__(self, name, domains):
+        super().__init__((self.SSL_CONFIG_FILE,))
         self.name = name
         self.domains = domains
 
@@ -274,7 +297,7 @@ class LetsEncryptCertificate(Component):
             cmd.extend(['-d', domain])
         _run(cmd)
         copy_with_replace(
-            '/opt/djevops/conf/nginx/ssl',
+            self.SSL_CONFIG_FILE,
             self._ssl_include_path,
             {'$SERVICE': self.name}
         )
@@ -303,6 +326,7 @@ class LetsEncryptCertificate(Component):
 class IptablesRules(Component):
 
     def __init__(self, accept=(), reject=()):
+        super().__init__()
         self.accept = list(accept)
         self.reject = list(reject)
 
@@ -326,7 +350,14 @@ class IptablesRules(Component):
 
 class Postfix(Component):
 
+    MAIN_CF_FILE = '/opt/djevops/conf/postfix/main.cf'
+    SASL_PASSWD_FILE = '/opt/djevops/conf/postfix/sasl_passwd'
+    GENERIC_FILE = '/opt/djevops/conf/postfix/generic'
+
     def __init__(self, hostname, smtp_host, smtp_user, smtp_password):
+        super().__init__(
+            (self.MAIN_CF_FILE, self.SASL_PASSWD_FILE, self.GENERIC_FILE)
+        )
         self.hostname = hostname
         self.smtp_host = smtp_host
         self.smtp_user = smtp_user
@@ -337,7 +368,7 @@ class Postfix(Component):
             f.write(self.hostname + '\n')
         chown('/etc/mailname', 'postfix')
         copy_with_replace(
-            '/opt/djevops/conf/postfix/main.cf',
+            self.MAIN_CF_FILE,
             '/etc/postfix/main.cf',
             {
                 '$HOST_NAME': self.hostname,
@@ -345,7 +376,7 @@ class Postfix(Component):
             }
         )
         copy_with_replace(
-            '/opt/djevops/conf/postfix/sasl_passwd',
+            self.SASL_PASSWD_FILE,
             '/etc/postfix/sasl_passwd',
             {
                 '$SMTP_HOST': self.smtp_host,
@@ -361,10 +392,7 @@ class Postfix(Component):
         _run('postmap /etc/postfix/sasl_passwd')
         chmod('/etc/postfix/sasl_passwd', 0o400)
         chown('/etc/postfix/sasl_passwd', 'postfix')
-        _run(
-            'envsubst < /opt/djevops/conf/postfix/generic > '
-            '/etc/postfix/generic'
-        )
+        _run(f'envsubst < {self.GENERIC_FILE} > /etc/postfix/generic')
         if exists('/etc/postfix/generic.db'):
             remove('/etc/postfix/generic.db')
         _run('postmap /etc/postfix/generic')
@@ -391,6 +419,7 @@ class Postfix(Component):
 class Crontab(Component):
 
     def __init__(self, jobs, mailto=''):
+        super().__init__()
         self.jobs = list(jobs)
         self.mailto = mailto
 
@@ -414,6 +443,7 @@ class Crontab(Component):
 class NginxSite(Component):
 
     def __init__(self, name, source, replacements):
+        super().__init__((source,))
         self.name = name
         self.source = source
         self.replacements = replacements
@@ -448,6 +478,7 @@ class NginxSite(Component):
 class TemplatedFile(Component):
 
     def __init__(self, target, source, replacements):
+        super().__init__((source,))
         self.target = target
         self.source = source
         self.replacements = replacements

@@ -1,4 +1,3 @@
-from djevops.remote.components import Component
 from djevops.remote.scaffold import load_components, save_components
 
 class ComponentRegistry:
@@ -11,11 +10,13 @@ class ComponentRegistry:
         key = _get_full_key(component)
         self._required.add(key)
         components = load_components()
-        if components.get(key) == component.args:
+        hash_ = component.calculate_hash()
+        stored_hash = components.get(key, {}).get('hash')
+        if hash_ == stored_hash:
             return False
         self._log(f'Installing {component}...')
         component.install()
-        components[key] = component.args
+        components[key] = {'component': component, 'hash': hash_}
         save_components(components)
         return True
 
@@ -25,7 +26,7 @@ class ComponentRegistry:
         for key in reversed(list(components)):
             if key in self._required:
                 continue
-            component = _restore(key, components[key])
+            component = components[key]['component']
             self._log(f'Uninstalling {component}...')
             component.uninstall()
             del components[key]
@@ -40,8 +41,3 @@ def _get_full_key(component):
     if component.key is not None:
         result += f':{component.key}'
     return result
-
-def _restore(full_key, args):
-    class_name = full_key.split(':', 1)[0]
-    classes = {cls.__name__: cls for cls in Component.__subclasses__()}
-    return classes[class_name](**args)
