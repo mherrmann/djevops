@@ -114,7 +114,7 @@ class VirtualEnvironment(Component):
         self.path = path
 
     def install(self):
-        _run(f'uv venv {self.path}')
+        _run(f'uv venv -c {self.path}')
 
     def uninstall(self):
         rmtree(self.path, ignore_errors=True)
