@@ -1,8 +1,12 @@
 from ipaddress import ip_address
+from datetime import datetime
 from subprocess import run, PIPE, STDOUT, CalledProcessError
 
 import re
 import sys
+
+TERMINAL_COLOR_SUCCESS = 93
+TERMINAL_COLOR_ERROR = 91
 
 def copy_with_replace(source, target, replacements):
     with open(source, 'r') as f:
@@ -68,3 +72,14 @@ def prompt_yes_no(question):
             return False
         else:
             print('Please answer y or n.')
+
+def log(message):
+    _log(message, TERMINAL_COLOR_SUCCESS)
+
+def error(message):
+    _log(message, TERMINAL_COLOR_ERROR)
+    sys.exit(1)
+
+def _log(message, color):
+    timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+    print(f'\033[0;32m{timestamp}\033[0m \033[0;{color}m{message}\033[0m')

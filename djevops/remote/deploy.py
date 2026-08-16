@@ -1,4 +1,3 @@
-from datetime import datetime
 from djevops.backup import as_cron, parse_sync_interval
 from djevops.remote.component_registry import ComponentRegistry
 from djevops.remote.components import AptPackage, SshKey, Crontab, Hostname, \
@@ -17,7 +16,7 @@ from djevops.remote.scaffold import DJEVOPS_PYTHON, get_deploy_config, \
     get_secrets
 from djevops.remote.util import chown, ensure_group_exists, run as _run, \
     symlink_force
-from djevops.util import is_domain
+from djevops.util import is_domain, log, error
 from os import chmod, makedirs
 from os.path import exists
 from shlex import quote
@@ -25,11 +24,7 @@ from shutil import rmtree, copyfile
 from subprocess import run, CalledProcessError, DEVNULL, Popen
 from time import sleep
 
-import sys
 import yaml
-
-TERMINAL_COLOR_SUCCESS = 93
-TERMINAL_COLOR_ERROR = 91
 
 def main():
     config = get_deploy_config()
@@ -356,17 +351,6 @@ def main():
 
 def debconf_set_selections(value):
     run(['debconf-set-selections'], input=value + '\n', text=True, check=True)
-
-def log(message):
-    _log(message, TERMINAL_COLOR_SUCCESS)
-
-def error(message):
-    _log(message, TERMINAL_COLOR_ERROR)
-    sys.exit(1)
-
-def _log(message, color):
-    timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
-    print(f'\n\033[0;32m{timestamp}\033[0m \033[0;{color}m{message}\033[0m')
 
 class Supervisorctl:
     def __init__(self):
