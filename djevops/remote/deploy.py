@@ -22,7 +22,7 @@ from os import chmod, makedirs
 from os.path import exists
 from shlex import quote
 from shutil import rmtree, copyfile
-from subprocess import run, CalledProcessError, DEVNULL
+from subprocess import run, CalledProcessError, DEVNULL, Popen
 from time import sleep
 
 import sys
@@ -295,7 +295,10 @@ def main():
         parts = line.split(': ', 1)
         assert len(parts) == 2, line
         updated_services.add(parts[0])
-    # Restart those programs that were not already handled by `update`:
+    # Restart those programs that were not already handled by `update`. The
+    # Supervisorctl class lets us submit the commands concurrently for improved
+    # speed.
+    supervisorctl = Supervisorctl()
     for program_name, user, hup_eligible in programs:
         if program_name in updated_services:
             continue
@@ -306,9 +309,10 @@ def main():
                 if e.returncode != 7:
                     raise
                 # The service wasn't running.
-                _run_silently(['supervisorctl', 'start', program_name])
+                supervisorctl.submit('start', program_name)
         else:
-            _run_silently(['supervisorctl', 'restart', program_name])
+            supervisorctl.submit('restart', program_name)
+    supervisorctl.wait()
     # This loop should not run forever because we supply `startsecs` in the
     # supervisor config file.
     while True:
@@ -366,8 +370,16 @@ def _log(message, color):
     timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
     print(f'\n\033[0;32m{timestamp}\033[0m \033[0;{color}m{message}\033[0m')
 
-def _run_silently(cmd):
-    return run(cmd, stdout=DEVNULL, stderr=DEVNULL)
+class Supervisorctl:
+    def __init__(self):
+        self.pending = []
+    def submit(self, *args):
+        self.pending.append(
+            Popen(['supervisorctl', *args], stdout=DEVNULL, stderr=DEVNULL)
+        )
+    def wait(self):
+        for process in self.pending:
+            process.wait()
 
 if __name__ == '__main__':
     try:
