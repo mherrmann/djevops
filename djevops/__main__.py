@@ -9,7 +9,7 @@ from djevops.util import git, get_apt_install_cmd, prompt_yes_no, \
     run_in_django_shell, run_silently
 from functools import partial
 from os import remove, makedirs
-from os.path import basename, dirname, exists
+from os.path import basename, dirname, exists, expanduser
 from runpy import run_path
 from shlex import quote, split
 from shutil import which
@@ -335,12 +335,10 @@ def run_with_djevops_venv(user, host, cmd, quiet):
     ssh(user, host, f'/opt/djevops/.venv/bin/{cmd}', quiet)
 
 def rsync(*args):
-    ssh_cmd = get_ssh_command()
-    extra_rsync_args = [] if ssh_cmd == 'ssh' else ['-e', ssh_cmd]
     # --no-owner/--no-group so uploads belong to the remote user (root), not to
     # whatever uid the local user happens to have.
     run_silently(
-        ['rsync', *extra_rsync_args, *args, '--no-owner', '--no-group']
+        ['rsync', '-e', get_ssh_command(), *args, '--no-owner', '--no-group']
     )
 
 def ssh(user, host, cmd, quiet):
@@ -353,10 +351,20 @@ def scp(src, dst):
     run_silently(['scp', *ssh_opts, src, dst])
 
 def get_ssh_command():
-    try:
-        return os.environ['DJEVOPS_SSH_COMMAND']
-    except KeyError:
-        return 'ssh'
+    result = os.environ.get('DJEVOPS_SSH_COMMAND', 'ssh')
+    # Speed up deploys by multiplexing all SSH connections over a single
+    # handshake. This saves roughly half a second per connection, or 2-3
+    # seconds per deploy. The socket lives in ~/.ssh (not /tmp) so other local
+    # users cannot pre-create it. The socket file gets cleaned up
+    # automatically: The master connection removes it when exiting after 60s
+    # of inactivity. Should that not happen (say the process gets killed),
+    # then the next connection replaces the stale socket file.
+    makedirs(expanduser('~/.ssh'), mode=0o700, exist_ok=True)
+    result += (
+        ' -o ControlMaster=auto -o ControlPath=~/.ssh/djevops-%C'
+        ' -o ControlPersist=60s'
+    )
+    return result
 
 def main():
     parser = ArgumentParser(prog='djevops')
