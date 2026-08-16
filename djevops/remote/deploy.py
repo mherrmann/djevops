@@ -313,7 +313,7 @@ def main():
     while True:
         supervisor_status_str = _run('supervisorctl status')
         if 'STARTING' in supervisor_status_str:
-            sleep(1)
+            sleep(0.2)
         else:
             break
     supervisor_status = {}
