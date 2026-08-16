@@ -337,7 +337,11 @@ def run_with_djevops_venv(user, host, cmd, quiet):
 def rsync(*args):
     ssh_cmd = get_ssh_command()
     extra_rsync_args = [] if ssh_cmd == 'ssh' else ['-e', ssh_cmd]
-    run_silently(['rsync', *extra_rsync_args, *args])
+    # --no-owner/--no-group so uploads belong to the remote user (root), not to
+    # whatever uid the local user happens to have.
+    run_silently(
+        ['rsync', *extra_rsync_args, *args, '--no-owner', '--no-group']
+    )
 
 def ssh(user, host, cmd, quiet):
     ssh_cmd = get_ssh_command()
