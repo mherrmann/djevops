@@ -338,10 +338,6 @@ def main():
 
     _run('nginx -s reload')
 
-    server_url = f'https://{primary_domain}' if primary_domain \
-        else f'http://{server_ip}'
-    log(f'The server is now serving requests at {server_url}!')
-
     symlink_force('/opt/djevops/bin/cronic', '/usr/bin/cronic')
     require(Crontab(cron_jobs, mailto=admin_email))
 
@@ -354,7 +350,9 @@ def main():
         _run('supervisorctl update')
         _run('nginx -s reload')
 
-    log('Done.')
+    server_url = f'https://{primary_domain}' if primary_domain \
+        else f'http://{server_ip}'
+    log(f'The server is now serving requests at {server_url}.')
 
 def debconf_set_selections(value):
     run(['debconf-set-selections'], input=value + '\n', text=True, check=True)
