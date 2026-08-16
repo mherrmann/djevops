@@ -19,23 +19,28 @@ def migrate_db():
     _run_manage_sh('migrate')
 
 def collect_static_files():
-    installed_apps = get_django_setting('INSTALLED_APPS')
-    if 'django.contrib.staticfiles' not in installed_apps:
+    settings = get_django_settings(['INSTALLED_APPS', 'STATIC_ROOT'])
+    if 'django.contrib.staticfiles' not in settings['INSTALLED_APPS']:
         return
-    if get_django_setting('STATIC_ROOT'):
+    if settings['STATIC_ROOT']:
         _run_manage_sh('collectstatic', '--noinput')
 
 def get_django_setting(setting_name, env=None):
+    return get_django_settings([setting_name], env)[setting_name]
+
+# Batched version of get_django_setting for improved performance.
+def get_django_settings(setting_names, env=None):
     if env is None:
         env = _get_django_env()
+    items = ', '.join(f'{name!r}: settings.{name}' for name in setting_names)
     # Use json because it seems a little safer than eval()
-    setting_json = run_in_django_shell([
+    settings_json = run_in_django_shell([
         'from django.conf import settings',
         'import json',
-        f'print(json.dumps(settings.{setting_name}))'],
+        f'print(json.dumps({{{items}}}))'],
         '/srv/venv/bin/python', '/srv/app/manage.py', env
     )
-    return json.loads(setting_json)
+    return json.loads(settings_json)
 
 def _run_manage_sh(*args):
     run_silently([MANAGE_SH] + list(args), env=_get_django_env())

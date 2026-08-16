@@ -9,7 +9,7 @@ from djevops.config import get_backup_config, get_services_users_envs, \
 from djevops.litestream import get_litestream_config
 from djevops.remote import postgres
 from djevops.remote.actions import install_python_deps, migrate_db, \
-    collect_static_files, get_django_setting
+    collect_static_files, get_django_setting, get_django_settings
 from djevops.remote.nginx import get_header_name_from_meta_key, \
     get_nginx_size_from_bytes
 from djevops.remote.scaffold import DJEVOPS_PYTHON, get_deploy_config, \
@@ -118,32 +118,33 @@ def main():
             changed_bashrcs.add(user)
         service = services[service_name]
         if service['type'] == 'django':
-            if not primary_domain:
-                for host in get_django_setting('ALLOWED_HOSTS', env):
-                    if is_domain(host):
-                        primary_domain = host
-                        require(Hostname(primary_domain))
-                        break
+            django_settings = get_django_settings([
+                'ADMINS', 'ALLOWED_HOSTS', 'DATA_UPLOAD_MAX_MEMORY_SIZE',
+                'SECURE_PROXY_SSL_HEADER'
+            ], env)
+            domains = [
+                host for host in django_settings['ALLOWED_HOSTS']
+                if is_domain(host)
+            ]
+            if not primary_domain and domains:
+                primary_domain = domains[0]
+                require(Hostname(primary_domain))
             if not admin_email:
-                admins = get_django_setting('ADMINS', env)
+                admins = django_settings['ADMINS']
                 if admins:
                     admin_email = admins[0]
                     if not isinstance(admin_email, str):
                         admin_email = admin_email[1]
-            domains = [
-                host for host in get_django_setting('ALLOWED_HOSTS', env)
-                if is_domain(host)
-            ]
             replacements = {
                 '$CLIENT_MAX_BODY_SIZE': get_nginx_size_from_bytes(
-                    get_django_setting('DATA_UPLOAD_MAX_MEMORY_SIZE', env)
+                    django_settings['DATA_UPLOAD_MAX_MEMORY_SIZE']
                 ),
                 '$SERVER_NAME': ' '.join(domains) or server_ip,
                 '$SERVICE': service_name,
                 '$USER': user,
                 '$PROXY_SSL_HEADER': '',
             }
-            ssl_header_tpl = get_django_setting('SECURE_PROXY_SSL_HEADER', env)
+            ssl_header_tpl = django_settings['SECURE_PROXY_SSL_HEADER']
             if ssl_header_tpl:
                 header_name = get_header_name_from_meta_key(ssl_header_tpl[0])
                 replacements['$PROXY_SSL_HEADER'] = \
