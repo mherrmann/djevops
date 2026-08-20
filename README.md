@@ -247,7 +247,7 @@ type `django` in `deploy/djevops.yml`.
 </details>
 
 <details>
-<summary>Custom scripts</summary>
+<summary>Custom services</summary>
 
 We saw several kinds of `services` above. Another one is `type: command`. For
 example:
