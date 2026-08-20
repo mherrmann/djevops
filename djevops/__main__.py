@@ -4,11 +4,12 @@ from djevops.backup import as_cron, parse_sync_interval
 from djevops.config import get_backup_config, get_services_users_envs, \
     get_django_service, SQLITE_DB_FILE
 from djevops.litestream import get_litestream_config
-from djevops.remote.scaffold import STATE_DIR, DEPLOY_CONFIG_PATH, SECRETS_PATH
+from djevops.remote.scaffold import DEPLOY_CONFIG_PATH, PREINSTALL_PATH, \
+    SECRETS_PATH, STATE_DIR
 from djevops.util import git, get_apt_install_cmd, prompt_yes_no, \
     run_in_django_shell, run_silently
 from functools import partial
-from os import remove, makedirs
+from os import access, makedirs, remove
 from os.path import basename, dirname, exists, expanduser
 from runpy import run_path
 from shlex import quote, split
@@ -157,6 +158,11 @@ def deploy(quiet=False, dry_run=False):
     finally:
         remove(secrets_json.name)
 
+    if exists('deploy/preinstall'):
+        rsync('-a', 'deploy/preinstall', f'root@{server}:{PREINSTALL_PATH}')
+    else:
+        ssh('root', server, f'rm -f {PREINSTALL_PATH}', quiet)
+
     run_with_djevops_venv(
         'root', server, 'python -u -m djevops.remote.deploy', quiet
     )
@@ -301,6 +307,13 @@ def check_config(deploy_config, secrets):
     ], env=django_shell_env)
     if error_msg:
         raise CommandError(error_msg)
+
+    preinstall = 'deploy/preinstall'
+    if exists(preinstall) and not access(preinstall, os.X_OK):
+        raise CommandError(
+            f'Please make {preinstall} executable:\n'
+            f'    chmod +x {preinstall}'
+        )
 
 def install_djevops_on_server(user, host, quiet):
     ssh_ = lambda cmd: ssh(user, host, cmd, quiet)

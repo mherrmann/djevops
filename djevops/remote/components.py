@@ -6,6 +6,7 @@ from os import chmod, makedirs, remove
 from os.path import exists, expanduser, join
 from shlex import quote
 from shutil import rmtree
+from tempfile import TemporaryDirectory
 from urllib.request import urlretrieve
 
 import json
@@ -105,6 +106,23 @@ class KnownHostsEntry(Component):
 
     def __str__(self):
         return f'Known hosts entry for {self.host}'
+
+
+class PreinstallScript(Component):
+
+    def __init__(self, path):
+        super().__init__((path,))
+        self.path = path
+
+    def install(self):
+        with TemporaryDirectory() as temp_dir:
+            _run([self.path], cwd=temp_dir)
+
+    def uninstall(self):
+        pass
+
+    def __str__(self):
+        return 'preinstall script'
 
 
 class VirtualEnvironment(Component):

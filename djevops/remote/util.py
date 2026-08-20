@@ -8,12 +8,12 @@ import subprocess
 
 _ERROR_ALREADY_EXISTS = 9
 
-def run(cmd, ignore_errors=(), env=None):
+def run(cmd, ignore_errors=(), env=None, cwd=None):
     shell = isinstance(cmd, str)
     try:
         return subprocess.run(
             cmd, shell=shell, stdout=PIPE, stderr=STDOUT, text=True, check=True,
-            env=env
+            env=env, cwd=cwd
         ).stdout.strip()
     except CalledProcessError as e:
         if e.returncode not in ignore_errors:

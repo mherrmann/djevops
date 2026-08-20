@@ -263,6 +263,34 @@ This runs `my-service.sh` from your Git repository whenever your server is
 running. The command must not exit; if it does, djevops restarts it.
 </details>
 
+<details>
+<summary>Custom server setup via a `preinstall` script</summary>
+
+Sometimes your app needs software on the server that djevops does not know
+about, for example an apt package or a tool built from source. For such cases,
+you can create an executable file `deploy/preinstall` next to
+`deploy/djevops.yml`. For example:
+
+```
+#!/bin/bash
+set -euxo pipefail
+apt-get install -yq faketime
+```
+
+Don't forget to `chmod +x deploy/preinstall`. The file can be any executable:
+a shell script as above, a Python script, a binary, etc.
+
+When this file exists, `djevops deploy` runs it on the server. This happens as
+root, in an empty temporary directory, after your Git repository has been
+cloned into `/srv/app` but before your app's dependencies are installed and
+its services are started.
+
+To keep deploys fast, djevops only runs the script when its contents have
+changed since the last successful run. If the script fails, the deploy aborts
+and the script runs again on the next deploy. It should therefore tolerate
+re-running over the results of a previous execution.
+</details>
+
 ## Development
 
 Install the `test` dependencies from `pyproject.toml`. The easiest way I know

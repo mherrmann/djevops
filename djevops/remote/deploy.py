@@ -3,7 +3,8 @@ from djevops.remote.component_registry import ComponentRegistry
 from djevops.remote.components import AptPackage, SshKey, Crontab, Hostname, \
     IptablesRules, KnownHostsEntry, LetsEncryptCertificate, \
     LetsEncryptRegistration, Litestream, NginxSite, Postfix, \
-    SelfSignedCertificate, ServiceUser, TemplatedFile, VirtualEnvironment
+    PreinstallScript, SelfSignedCertificate, ServiceUser, TemplatedFile, \
+    VirtualEnvironment
 from djevops.config import get_backup_config, get_services_users_envs, \
     SQLITE_DB_FILE
 from djevops.litestream import get_litestream_config
@@ -12,8 +13,8 @@ from djevops.remote.actions import install_python_deps, migrate_db, \
     collect_static_files, get_django_setting, get_django_settings
 from djevops.remote.nginx import get_header_name_from_meta_key, \
     get_nginx_size_from_bytes
-from djevops.remote.scaffold import DJEVOPS_PYTHON, get_deploy_config, \
-    get_secrets
+from djevops.remote.scaffold import DJEVOPS_PYTHON, PREINSTALL_PATH, \
+    get_deploy_config, get_secrets
 from djevops.remote.util import chown, ensure_group_exists, run as _run, \
     symlink_force
 from djevops.util import is_domain, log, error
@@ -67,6 +68,9 @@ def main():
         except FileNotFoundError:
             pass
         _run(f'git clone -q -b {git_repo_branch} {git_repo_url} /srv/app')
+
+    if exists(PREINSTALL_PATH):
+        require(PreinstallScript(PREINSTALL_PATH))
 
     symlink_force('/opt/djevops/conf/.bash_profile', '/root/.bash_profile')
 

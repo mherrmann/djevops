@@ -7,6 +7,7 @@ import yaml
 STATE_DIR = '/root/.djevops'
 DEPLOY_CONFIG_PATH = join(STATE_DIR, 'deploy.yml')
 SECRETS_PATH = join(STATE_DIR, 'secrets.json')
+PREINSTALL_PATH = join(STATE_DIR, 'preinstall')
 COMPONENTS_PATH = join(STATE_DIR, 'components.pickle')
 
 # We have /srv/venv/bin/python on the server, but that's the Django app's

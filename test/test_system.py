@@ -8,6 +8,7 @@ from os import remove
 from os.path import basename
 from pathlib import Path
 from shlex import quote
+from stat import S_IXUSR
 from subprocess import CalledProcessError
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from test import hetzner
@@ -405,6 +406,24 @@ class OnlineTest(SystemTest):
 
         output = self._ssh(f'cat /var/log/{service_name}.log')
         self.assertIn(marker, output)
+
+    def test_preinstall(self):
+        marker = f'/root/preinstall-ran-{self.test_name}'
+        preinstall = Path('deploy/preinstall')
+        preinstall.write_text(f'#!/bin/bash -e\necho run >> {marker}\n')
+        preinstall.chmod(preinstall.stat().st_mode | S_IXUSR)
+        try:
+            deploy(self.QUIET)
+            # A second deploy with an unchanged script must not re-run it.
+            deploy(self.QUIET)
+            self.assertEqual('1', self._ssh(f'wc -l < {marker}'))
+            preinstall.write_text(
+                f'#!/bin/bash -e\necho changed run >> {marker}\n'
+            )
+            deploy(self.QUIET)
+            self.assertEqual('2', self._ssh(f'wc -l < {marker}'))
+        finally:
+            preinstall.unlink()
 
     def _configure_sqlite(self):
         with self.update_deploy_yml() as deploy_yml:
