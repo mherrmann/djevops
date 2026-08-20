@@ -1,6 +1,6 @@
 from ipaddress import ip_address
 from datetime import datetime
-from subprocess import run, PIPE, STDOUT, CalledProcessError
+from subprocess import run, PIPE, CalledProcessError
 
 import re
 import sys
@@ -26,13 +26,16 @@ def run_in_django_shell(
     return run_silently(args, env=env)
 
 def run_silently(*args, **kwargs):
+    # Only return stdout. Stderr may contain noise such as SyntaxWarnings
+    # emitted while byte-compiling third-party packages on first import.
     try:
         return run(
-            *args, **kwargs, stdout=PIPE, stderr=STDOUT, text=True, check=True
+            *args, **kwargs, stdout=PIPE, stderr=PIPE, text=True, check=True
         ).stdout.strip()
     except CalledProcessError as e:
-        raise CalledProcessErrorShowingOutput(e.returncode, e.cmd, e.output) \
-            from None
+        raise CalledProcessErrorShowingOutput(
+            e.returncode, e.cmd, e.stdout + e.stderr
+        ) from None
 
 class CalledProcessErrorShowingOutput(CalledProcessError):
     def __str__(self):

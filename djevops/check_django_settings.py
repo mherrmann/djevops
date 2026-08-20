@@ -85,5 +85,6 @@ def check_server_email():
         )
 
 def error(message):
-    sys.stderr.write(message + '\n\n' + GIT_HINT)
+    # Write to stdout because that is what run_in_django_shell(...) returns.
+    sys.stdout.write(message + '\n\n' + GIT_HINT)
     sys.exit(0)
