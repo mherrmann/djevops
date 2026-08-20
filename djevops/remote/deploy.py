@@ -1,9 +1,9 @@
 from djevops.backup import as_cron, parse_sync_interval
 from djevops.remote.component_registry import ComponentRegistry
-from djevops.remote.components import AptPackage, SshKey, Crontab, Hostname, \
-    IptablesRules, KnownHostsEntry, LetsEncryptCertificate, \
+from djevops.remote.components import AptPackage, SshKey, Crontab, Hook, \
+    Hostname, IptablesRules, KnownHostsEntry, LetsEncryptCertificate, \
     LetsEncryptRegistration, Litestream, NginxSite, Postfix, \
-    PreinstallScript, SelfSignedCertificate, ServiceUser, TemplatedFile, \
+    SelfSignedCertificate, ServiceUser, TemplatedFile, \
     VirtualEnvironment
 from djevops.config import get_backup_config, get_services_users_envs, \
     SQLITE_DB_FILE
@@ -13,8 +13,8 @@ from djevops.remote.actions import install_python_deps, migrate_db, \
     collect_static_files, get_django_setting, get_django_settings
 from djevops.remote.nginx import get_header_name_from_meta_key, \
     get_nginx_size_from_bytes
-from djevops.remote.scaffold import DJEVOPS_PYTHON, PREINSTALL_PATH, \
-    get_deploy_config, get_secrets
+from djevops.remote.scaffold import DJEVOPS_PYTHON, get_deploy_config, \
+    get_hook_path, get_secrets
 from djevops.remote.util import chown, ensure_group_exists, run as _run, \
     symlink_force
 from djevops.util import is_domain, log, error
@@ -50,6 +50,10 @@ def main():
         for package in packages:
             require(AptPackage(package))
 
+    def require_hook(name):
+        if exists(get_hook_path(name)):
+            require(Hook(name, secrets))
+
     install_if_not_installed('git')
 
     if git_repo_key:
@@ -69,8 +73,7 @@ def main():
             pass
         _run(f'git clone -q -b {git_repo_branch} {git_repo_url} /srv/app')
 
-    if exists(PREINSTALL_PATH):
-        require(PreinstallScript(PREINSTALL_PATH))
+    require_hook('pre-install')
 
     symlink_force('/opt/djevops/conf/.bash_profile', '/root/.bash_profile')
 
@@ -290,6 +293,8 @@ def main():
 
     log('Initializing run/ directory...')
     _run('/opt/djevops/bin/init-run-dir.sh')
+
+    require_hook('post-install')
 
     log('Starting services...')
     updated_services_str = _run('supervisorctl update')

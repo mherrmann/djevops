@@ -407,23 +407,39 @@ class OnlineTest(SystemTest):
         output = self._ssh(f'cat /var/log/{service_name}.log')
         self.assertIn(marker, output)
 
-    def test_preinstall(self):
-        marker = f'/root/preinstall-ran-{self.test_name}'
-        preinstall = Path('deploy/preinstall')
-        preinstall.write_text(f'#!/bin/bash -e\necho run >> {marker}\n')
-        preinstall.chmod(preinstall.stat().st_mode | S_IXUSR)
+    def test_hooks(self):
+        marker = f'/root/hooks-ran-{self.test_name}'
+        pre_install = Path('deploy/pre-install')
+        post_install = Path('deploy/post-install')
+        self._write_hook(pre_install, f'echo pre >> {marker}')
+        self._write_hook(
+            post_install,
+            'id web',
+            'test -x /srv/venv/bin/python',
+            f'echo post $HOOK_SECRET >> {marker}'
+        )
+        self.add_to_secrets({'HOOK_SECRET': 'first'})
         try:
             deploy(self.QUIET)
-            # A second deploy with an unchanged script must not re-run it.
+            # A second deploy with unchanged hooks must not re-run them.
             deploy(self.QUIET)
-            self.assertEqual('1', self._ssh(f'wc -l < {marker}'))
-            preinstall.write_text(
-                f'#!/bin/bash -e\necho changed run >> {marker}\n'
+            self.assertEqual(
+                'pre\npost first', self._ssh(f'cat {marker}')
             )
+            self._write_hook(pre_install, f'echo pre changed >> {marker}')
+            self.add_to_secrets({'HOOK_SECRET': 'second'})
             deploy(self.QUIET)
-            self.assertEqual('2', self._ssh(f'wc -l < {marker}'))
+            self.assertEqual(
+                'pre\npost first\npre changed\npost second',
+                self._ssh(f'cat {marker}')
+            )
         finally:
-            preinstall.unlink()
+            pre_install.unlink()
+            post_install.unlink()
+
+    def _write_hook(self, path, *lines):
+        path.write_text('#!/bin/bash -e\n' + '\n'.join(lines))
+        path.chmod(path.stat().st_mode | S_IXUSR)
 
     def _configure_sqlite(self):
         with self.update_deploy_yml() as deploy_yml:

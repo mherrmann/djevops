@@ -4,8 +4,8 @@ from djevops.backup import as_cron, parse_sync_interval
 from djevops.config import get_backup_config, get_services_users_envs, \
     get_django_service, SQLITE_DB_FILE
 from djevops.litestream import get_litestream_config
-from djevops.remote.scaffold import DEPLOY_CONFIG_PATH, PREINSTALL_PATH, \
-    SECRETS_PATH, STATE_DIR
+from djevops.remote.scaffold import DEPLOY_CONFIG_PATH, HOOK_NAMES, \
+    SECRETS_PATH, STATE_DIR, get_hook_path
 from djevops.util import git, get_apt_install_cmd, prompt_yes_no, \
     run_in_django_shell, run_silently
 from functools import partial
@@ -158,10 +158,13 @@ def deploy(quiet=False, dry_run=False):
     finally:
         remove(secrets_json.name)
 
-    if exists('deploy/preinstall'):
-        rsync('-a', 'deploy/preinstall', f'root@{server}:{PREINSTALL_PATH}')
-    else:
-        ssh('root', server, f'rm -f {PREINSTALL_PATH}', quiet)
+    for hook_name in HOOK_NAMES:
+        local_path = f'deploy/{hook_name}'
+        remote_path = get_hook_path(hook_name)
+        if exists(local_path):
+            rsync('-a', local_path, f'root@{server}:{remote_path}')
+        else:
+            ssh('root', server, f'rm -f {remote_path}', quiet)
 
     run_with_djevops_venv(
         'root', server, 'python -u -m djevops.remote.deploy', quiet
@@ -308,12 +311,13 @@ def check_config(deploy_config, secrets):
     if error_msg:
         raise CommandError(error_msg)
 
-    preinstall = 'deploy/preinstall'
-    if exists(preinstall) and not access(preinstall, os.X_OK):
-        raise CommandError(
-            f'Please make {preinstall} executable:\n'
-            f'    chmod +x {preinstall}'
-        )
+    for hook_name in HOOK_NAMES:
+        hook = f'deploy/{hook_name}'
+        if exists(hook) and not access(hook, os.X_OK):
+            raise CommandError(
+                f'Please make {hook} executable:\n'
+                f'    chmod +x {hook}'
+            )
 
 def install_djevops_on_server(user, host, quiet):
     ssh_ = lambda cmd: ssh(user, host, cmd, quiet)

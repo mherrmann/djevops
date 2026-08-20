@@ -1,3 +1,4 @@
+from djevops.remote.scaffold import get_hook_path
 from djevops.remote.util import chown, ensure_group_exists, \
     ensure_user_exists, run as _run, symlink_force
 from djevops.util import copy_with_replace, get_apt_install_cmd
@@ -10,6 +11,7 @@ from tempfile import TemporaryDirectory
 from urllib.request import urlretrieve
 
 import json
+import os
 
 class Component:
 
@@ -108,21 +110,27 @@ class KnownHostsEntry(Component):
         return f'Known hosts entry for {self.host}'
 
 
-class PreinstallScript(Component):
+class Hook(Component):
 
-    def __init__(self, path):
-        super().__init__((path,))
-        self.path = path
+    def __init__(self, name, secrets):
+        super().__init__((get_hook_path(name),))
+        self.name = name
+        self.secrets = secrets
 
     def install(self):
+        env = os.environ | {k: str(v) for k, v in self.secrets.items()}
         with TemporaryDirectory() as temp_dir:
-            _run([self.path], cwd=temp_dir)
+            _run([get_hook_path(self.name)], cwd=temp_dir, env=env)
 
     def uninstall(self):
         pass
 
+    @property
+    def key(self):
+        return self.name
+
     def __str__(self):
-        return 'preinstall script'
+        return f'{self.name} hook'
 
 
 class VirtualEnvironment(Component):

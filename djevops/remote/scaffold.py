@@ -7,7 +7,7 @@ import yaml
 STATE_DIR = '/root/.djevops'
 DEPLOY_CONFIG_PATH = join(STATE_DIR, 'deploy.yml')
 SECRETS_PATH = join(STATE_DIR, 'secrets.json')
-PREINSTALL_PATH = join(STATE_DIR, 'preinstall')
+HOOK_NAMES = ('pre-install', 'post-install')
 COMPONENTS_PATH = join(STATE_DIR, 'components.pickle')
 
 # We have /srv/venv/bin/python on the server, but that's the Django app's
@@ -33,3 +33,6 @@ def load_components():
 def save_components(components):
     with open(COMPONENTS_PATH, 'wb') as f:
         pickle.dump(components, f)
+
+def get_hook_path(name):
+    return join(STATE_DIR, name)

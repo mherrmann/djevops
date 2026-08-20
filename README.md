@@ -264,12 +264,20 @@ running. The command must not exit; if it does, djevops restarts it.
 </details>
 
 <details>
-<summary>Custom server setup via a `preinstall` script</summary>
+<summary>Hooks</summary>
 
-Sometimes your app needs software on the server that djevops does not know
-about, for example an apt package or a tool built from source. For such cases,
-you can create an executable file `deploy/preinstall` next to
-`deploy/djevops.yml`. For example:
+Sometimes your app needs things on the server that djevops does not know
+about, for example an apt package, a tool built from source, or an SSH key for
+one of your services. For such cases, you can create executable *hooks* next to
+`deploy/djevops.yml`. djevops runs them on the server at specific points during
+`djevops deploy`. The available hooks are:
+
+ * `deploy/pre-install` runs after your Git repository has been cloned into
+   `/srv/app` but before your app's dependencies are installed.
+ * `deploy/post-install` runs after everything else has been set up and just
+   before your services are started.
+
+For example:
 
 ```
 #!/bin/bash
@@ -277,18 +285,14 @@ set -euxo pipefail
 apt-get install -yq faketime
 ```
 
-Don't forget to `chmod +x deploy/preinstall`. The file can be any executable:
-a shell script as above, a Python script, a binary, etc.
+Don't forget to `chmod +x` the hook. It can be any executable: a shell script as
+above, a Python script, a binary, etc. Hooks run as root in an empty temporary
+directory. The values from your `deploy/secrets.py` are available to them as
+environment variables.
 
-When this file exists, `djevops deploy` runs it on the server. This happens as
-root, in an empty temporary directory, after your Git repository has been
-cloned into `/srv/app` but before your app's dependencies are installed and
-its services are started.
-
-To keep deploys fast, djevops only runs the script when its contents have
-changed since the last successful run. If the script fails, the deploy aborts
-and the script runs again on the next deploy. It should therefore tolerate
-re-running over the results of a previous execution.
+To keep deploys fast, djevops only runs a hook when its contents or your secrets
+have changed since its last successful run. Because secrets sometimes do change,
+your hooks must be able to re-run over the results of a previous execution.
 </details>
 
 ## Development
