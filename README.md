@@ -246,6 +246,23 @@ server. This uses the environment variables and user of the first service of
 type `django` in `deploy/djevops.yml`.
 </details>
 
+<details>
+<summary>Custom scripts</summary>
+
+We saw several kinds of `services` above. Another one is `type: command`. For
+example:
+
+```
+services:
+  myservice:
+    type: command
+    command: ./my-service.sh
+```
+
+This runs `my-service.sh` from your Git repository whenever your server is
+running. The command must not exit; if it does, djevops restarts it.
+</details>
+
 ## Development
 
 Install the `test` dependencies from `pyproject.toml`. The easiest way I know
