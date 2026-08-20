@@ -1,4 +1,4 @@
-from django.conf import settings
+from django.conf import settings, global_settings
 from djevops import GIT_HINT
 from djevops.util import is_domain, is_ip
 
@@ -7,11 +7,13 @@ import sys
 
 SETTINGS_PY = settings.SETTINGS_MODULE.replace('.', '/') + '.py'
 
-def main(server_ip, db_type):
+def main(server_ip, db_type, mail_configured):
     check_allowed_hosts(server_ip)
     check_staticfiles()
     if db_type:
         check_databases(db_type)
+    if mail_configured:
+        check_server_email()
 
 def check_staticfiles():
     if 'django.contrib.staticfiles' in settings.INSTALLED_APPS:
@@ -69,6 +71,17 @@ def check_sqlite():
             "value of environment variable SQLITE_DB_FILE. A good expression "
             "is:\n"
             "    os.getenv('SQLITE_DB_FILE') or <what you had before>"
+        )
+
+def check_server_email():
+    if settings.ADMINS and \
+        settings.SERVER_EMAIL == global_settings.SERVER_EMAIL:
+        error(
+            "Because ADMINS is set, please also set Django setting "
+            "SERVER_EMAIL to an address from which your SMTP server lets you "
+            f"send emails. For example, in {SETTINGS_PY}:\n\n"
+            "    SERVER_EMAIL = 'sender@your.website.com'\n\n"
+            "Your server uses this as the sender address for error emails."
         )
 
 def error(message):

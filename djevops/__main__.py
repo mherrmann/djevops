@@ -291,11 +291,13 @@ def check_config(deploy_config, secrets):
     else:
         db_type = None
 
+    mail_configured = bool(deploy_config.get('mail'))
+
     # Ensure `djevops.check_django_settings` is loadable:
     django_shell_env = django_env | {'PYTHONPATH': ':'.join(sys.path)}
     error_msg = run_in_django_shell([
         'from djevops.check_django_settings import main',
-        f'main({server_ip!r}, {db_type!r})',
+        f'main({server_ip!r}, {db_type!r}, {mail_configured!r})',
     ], env=django_shell_env)
     if error_msg:
         raise CommandError(error_msg)

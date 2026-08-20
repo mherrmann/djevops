@@ -90,6 +90,7 @@ def main():
     log('Configuring services...')
     primary_domain = ''
     admin_email = ''
+    server_email = ''
     service_domains = {}
     services_users_envs = get_services_users_envs(config, secrets)
     changed_bashrcs = set()
@@ -120,7 +121,7 @@ def main():
         if service['type'] == 'django':
             django_settings = get_django_settings([
                 'ADMINS', 'ALLOWED_HOSTS', 'DATA_UPLOAD_MAX_MEMORY_SIZE',
-                'SECURE_PROXY_SSL_HEADER'
+                'SECURE_PROXY_SSL_HEADER', 'SERVER_EMAIL'
             ], env)
             domains = [
                 host for host in django_settings['ALLOWED_HOSTS']
@@ -135,6 +136,7 @@ def main():
                     admin_email = admins[0]
                     if not isinstance(admin_email, str):
                         admin_email = admin_email[1]
+                    server_email = django_settings['SERVER_EMAIL']
             replacements = {
                 '$CLIENT_MAX_BODY_SIZE': get_nginx_size_from_bytes(
                     django_settings['DATA_UPLOAD_MAX_MEMORY_SIZE']
@@ -229,6 +231,7 @@ def main():
             config['mail']['host'],
             secrets[config['mail']['user']],
             secrets[config['mail']['password']],
+            server_email,
         ))
 
     if 'redis' in config:

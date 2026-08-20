@@ -60,15 +60,23 @@ server's IP address.
 <details>
 <summary>Error emails</summary>
 
-If you filled in the `mail` section in the config file, then you can make Django
-email you when errors occur. To do so, set `ADMINS` in Django's `settings.py` as
-follows:
+When you fill in the `mail` section in the config file, then djevops sets up a
+local Postfix relay. This can be used to send emails from your server, for
+example via Django's `send_mail` function. If you additionally want to receive
+emails when errors occur on your server, set `ADMINS` and `SERVER_EMAIL` in
+Django's `settings.py` file, as follows:
 
 ```
-ADMINS = [('Your Name', 'your@email.com)]
+ADMINS = [('Your Name', 'your@email.com')]
+SERVER_EMAIL = 'sender@your.website.com'
 ```
 
-Error emails require Django setting `DEBUG` to be `False`.
+In the above example, `your@email.com` receives an email from
+`sender@your.website.com` when an error occurs on the server. In order for this
+to work, the credentials configured in the `mail` section must be allowed to
+send emails as `SERVER_EMAIL`.
+
+Error emails are only sent when Django setting `DEBUG` is `False`.
 </details>
 
 <details>

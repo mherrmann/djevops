@@ -354,7 +354,9 @@ class Postfix(Component):
     SASL_PASSWD_FILE = '/opt/djevops/conf/postfix/sasl_passwd'
     GENERIC_FILE = '/opt/djevops/conf/postfix/generic'
 
-    def __init__(self, hostname, smtp_host, smtp_user, smtp_password):
+    def __init__(
+        self, hostname, smtp_host, smtp_user, smtp_password, server_email
+    ):
         super().__init__(
             (self.MAIN_CF_FILE, self.SASL_PASSWD_FILE, self.GENERIC_FILE)
         )
@@ -362,6 +364,7 @@ class Postfix(Component):
         self.smtp_host = smtp_host
         self.smtp_user = smtp_user
         self.smtp_password = smtp_password
+        self.server_email = server_email
 
     def install(self):
         with open('/etc/mailname', 'w') as f:
@@ -392,7 +395,19 @@ class Postfix(Component):
         _run('postmap /etc/postfix/sasl_passwd')
         chmod('/etc/postfix/sasl_passwd', 0o400)
         chown('/etc/postfix/sasl_passwd', 'postfix')
-        _run(f'envsubst < {self.GENERIC_FILE} > /etc/postfix/generic')
+        if self.server_email:
+            copy_with_replace(
+                self.GENERIC_FILE,
+                '/etc/postfix/generic',
+                {
+                    '$HOST_NAME': self.hostname,
+                    '$SERVER_EMAIL': self.server_email,
+                }
+            )
+        else:
+            # main.cf always references the map, so keep an empty one rather
+            # than none at all.
+            open('/etc/postfix/generic', 'w').close()
         if exists('/etc/postfix/generic.db'):
             remove('/etc/postfix/generic.db')
         _run('postmap /etc/postfix/generic')
