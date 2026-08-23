@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 license = "MIT"
 authors = [{name = "Michael Herrmann"}]
 dependencies = ["boto3", "PyYAML==6.0.3"]
-version = "0.2.9"
+version = "0.2.10"
 # When the version above changes, then `uv.lock` needs to be updated as well.
 # You can do this in one of the following two ways:
 # 1) Bump the version in both files with `uv version`. Eg.
