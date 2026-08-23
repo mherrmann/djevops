@@ -241,12 +241,20 @@ class SelfSignedCertificate(Component):
 
 class Litestream(Component):
 
-    VERSION = '0.5.6'
+    def __init__(self):
+        super().__init__()
+        # An instance (not a class) attribute so version bumps change
+        # calculate_hash() and thus trigger a re-install on servers.
+        self.version = '0.5.16'
 
     def install(self):
         deb_path, _ = urlretrieve(self._deb_url)
-        _run(['dpkg', '-i', deb_path])
+        # The .deb ships /etc/litestream.yml as a conffile. Djevops overwrites
+        # that file, so upgrades would prompt for it. Keep our version:
+        _run(['dpkg', '-i', '--force-confdef', '--force-confold', deb_path])
         remove(deb_path)
+        # `dpkg -i` does not restart an already-running Litestream:
+        _run('systemctl try-restart litestream')
 
     def uninstall(self):
         _run('apt-get purge -yqq litestream')
@@ -255,11 +263,11 @@ class Litestream(Component):
     def _deb_url(self):
         return (
             f'https://github.com/benbjohnson/litestream/releases/download/'
-            f'v{self.VERSION}/litestream-{self.VERSION}-linux-x86_64.deb'
+            f'v{self.version}/litestream-{self.version}-linux-x86_64.deb'
         )
 
     def __str__(self):
-        return f'Litestream {self.VERSION}'
+        return f'Litestream {self.version}'
 
 
 class Hostname(Component):
