@@ -1,1 +1,4 @@
-@$HOST_NAME $SERVER_EMAIL
+# Give root's cron mail a sender the SMTP relay accepts. Deliberately not a
+# catch-all for the whole domain: that would also rewrite From addresses the
+# app sets explicitly, e.g. for DKIM alignment.
+root@$HOST_NAME $SERVER_EMAIL
