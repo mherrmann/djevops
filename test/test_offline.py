@@ -111,7 +111,7 @@ class OfflineTest(SystemTest):
             'names or IP addresses under which your server is accessible. '
             f'For example, in {self.SETTINGS_PY_RELPATH}:\n\n'
             '    import os\n'
-            '    ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(" ")\n\n'
+            '    ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split()\n\n'
             f'And in deploy/djevops.yml:\n\n'
             '    services:\n'
             '      web:\n'

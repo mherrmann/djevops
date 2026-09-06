@@ -34,7 +34,7 @@ def check_allowed_hosts(server_ip):
             'or IP addresses under which your server is accessible. For '
             f'example, in {SETTINGS_PY}:\n\n'
             '    import os\n'
-            '    ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(" ")\n\n'
+            '    ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split()\n\n'
             'And in deploy/djevops.yml:\n\n'
             '    services:\n'
             '      web:\n'
