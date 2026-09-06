@@ -1,6 +1,7 @@
 from os.path import join
 
 import json
+import os
 import pickle
 import yaml
 
@@ -14,6 +15,16 @@ COMPONENTS_PATH = join(STATE_DIR, 'components.pickle')
 # virtual environment. It does not necessarily have djevops and certainly does
 # not have a development version of djevops.
 DJEVOPS_PYTHON = '/opt/djevops/.venv/bin/python'
+
+# When the Django app has a .python-version that is different from what the
+# server ships, then uv by default installs that Python version into
+# /root/.local. The djevops service users do not have permission to access this
+# directory. In order to work around this, we instruct uv to install Python in a
+# world-readable location.
+UV_PYTHON_INSTALL_DIR = '/opt/uv/python'
+
+def get_uv_env(python_install_dir=UV_PYTHON_INSTALL_DIR):
+    return os.environ | {'UV_PYTHON_INSTALL_DIR': python_install_dir}
 
 def get_deploy_config():
     with open(DEPLOY_CONFIG_PATH) as f:

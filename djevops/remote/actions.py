@@ -1,5 +1,5 @@
 from djevops.config import get_services_users_envs, get_django_service
-from djevops.remote.scaffold import get_deploy_config, get_secrets
+from djevops.remote.scaffold import get_deploy_config, get_secrets, get_uv_env
 from djevops.util import run_in_django_shell, run_silently
 from os.path import exists
 
@@ -13,7 +13,9 @@ def install_python_deps():
     else:
         cmd = 'uv pip install -q --python /srv/venv/bin/python -r ' \
               'requirements.txt'
-    run_silently(f'cd /srv/app && {cmd}', shell=True)
+    # We need to pass get_uv_env in case the project's .python-version has
+    # changed.
+    run_silently(f'cd /srv/app && {cmd}', shell=True, env=get_uv_env())
 
 def migrate_db():
     _run_manage_sh('migrate')

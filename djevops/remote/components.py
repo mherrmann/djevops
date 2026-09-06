@@ -1,4 +1,4 @@
-from djevops.remote.scaffold import get_hook_path
+from djevops.remote.scaffold import get_hook_path, get_uv_env
 from djevops.remote.util import chown, ensure_group_exists, \
     ensure_user_exists, run as _run, symlink_force
 from djevops.util import copy_with_replace, get_apt_install_cmd
@@ -140,7 +140,7 @@ class VirtualEnvironment(Component):
         self.path = path
 
     def install(self):
-        _run(f'uv venv -c {self.path}')
+        _run(f'uv venv -c {self.path}', env=get_uv_env())
 
     def uninstall(self):
         rmtree(self.path, ignore_errors=True)
