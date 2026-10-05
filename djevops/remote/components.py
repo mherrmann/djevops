@@ -359,24 +359,39 @@ class LetsEncryptCertificate(Component):
 
 class IptablesRules(Component):
 
+    # We need to apply the rules for IPv6 as well; Otherwise, IPv6
+    # connections would not be blocked.
+
     def __init__(self, accept=(), reject=()):
         super().__init__()
         self.accept = list(accept)
         self.reject = list(reject)
+        # Bumped when install() changes, so that existing servers re-run it.
+        self.version = 2
 
     def install(self):
+        # A re-install must not add the rules a second time.
+        self.uninstall()
         for rule in self.accept:
-            _run(f'iptables -A INPUT {rule} -j ACCEPT')
+            self._run_iptables(f'-A INPUT {rule} -j ACCEPT')
         for rule in self.reject:
-            _run(f'iptables -A INPUT {rule} -j REJECT')
-        _run('iptables-save > /etc/iptables/rules.v4')
+            self._run_iptables(f'-A INPUT {rule} -j REJECT')
+        self._save()
 
     def uninstall(self):
         for rule in self.accept:
-            _run(f'iptables -D INPUT {rule} -j ACCEPT', ignore_errors=(1,))
+            self._run_iptables(f'-D INPUT {rule} -j ACCEPT', ignore_errors=(1,))
         for rule in self.reject:
-            _run(f'iptables -D INPUT {rule} -j REJECT', ignore_errors=(1,))
+            self._run_iptables(f'-D INPUT {rule} -j REJECT', ignore_errors=(1,))
+        self._save()
+
+    def _run_iptables(self, args, ignore_errors=()):
+        _run(f'iptables {args}', ignore_errors=ignore_errors)
+        _run(f'ip6tables {args}', ignore_errors=ignore_errors)
+
+    def _save(self):
         _run('iptables-save > /etc/iptables/rules.v4')
+        _run('ip6tables-save > /etc/iptables/rules.v6')
 
     def __str__(self):
         return 'iptables rules'
