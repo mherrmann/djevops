@@ -464,7 +464,9 @@ class Postfix(Component):
             remove('/etc/postfix/generic.db')
         _run('postmap /etc/postfix/generic')
         chown('/etc/postfix/generic', 'postfix')
-        _run('/etc/init.d/postfix reload')
+        # `restart`, not `reload`: a reload does not apply a changed
+        # inet_interfaces.
+        _run('/etc/init.d/postfix restart')
 
     def uninstall(self):
         for path in (
