@@ -404,7 +404,8 @@ class Postfix(Component):
     GENERIC_FILE = '/opt/djevops/conf/postfix/generic'
 
     def __init__(
-        self, hostname, smtp_host, smtp_user, smtp_password, server_email
+        self, hostname, smtp_host, smtp_user, smtp_password, server_email,
+        admin_email
     ):
         super().__init__(
             (self.MAIN_CF_FILE, self.SASL_PASSWD_FILE, self.GENERIC_FILE)
@@ -414,6 +415,7 @@ class Postfix(Component):
         self.smtp_user = smtp_user
         self.smtp_password = smtp_password
         self.server_email = server_email
+        self.admin_email = admin_email
 
     def install(self):
         with open('/etc/mailname', 'w') as f:
@@ -451,6 +453,7 @@ class Postfix(Component):
                 {
                     '$HOST_NAME': self.hostname,
                     '$SERVER_EMAIL': self.server_email,
+                    '$ADMIN_EMAIL': self.admin_email,
                 }
             )
         else:

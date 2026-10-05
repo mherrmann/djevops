@@ -239,6 +239,7 @@ def main():
             secrets[config['mail']['user']],
             secrets[config['mail']['password']],
             server_email,
+            admin_email,
         ))
 
     if 'redis' in config:

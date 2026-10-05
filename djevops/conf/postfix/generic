@@ -2,3 +2,9 @@
 # catch-all for the whole domain: that would also rewrite From addresses the
 # app sets explicitly, e.g. for DKIM alignment.
 root@$HOST_NAME $SERVER_EMAIL
+# Postfix addresses notices about its own problems to postmaster and sends
+# them as MAILER-DAEMON or double-bounce. None of these exist at the relay, so
+# the notices would bounce there. Send them to the admin instead.
+postmaster@$HOST_NAME $ADMIN_EMAIL
+MAILER-DAEMON@$HOST_NAME $SERVER_EMAIL
+double-bounce@$HOST_NAME $SERVER_EMAIL
