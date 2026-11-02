@@ -8,7 +8,7 @@ from djevops.remote.components import AptPackage, SshKey, Crontab, Hook, \
 from djevops.config import get_backup_config, get_services_users_envs, \
     SQLITE_DB_FILE
 from djevops.litestream import get_litestream_config
-from djevops.remote import postgres
+from djevops.remote import os_updates, postgres
 from djevops.remote.actions import install_python_deps, migrate_db, \
     collect_static_files, get_django_setting, get_django_settings
 from djevops.remote.nginx import get_header_name_from_meta_key, \
@@ -350,14 +350,17 @@ def main():
     symlink_force('/opt/djevops/bin/cronic', '/usr/bin/cronic')
     require(Crontab(cron_jobs, mailto=admin_email))
 
-    install_if_not_installed('unattended-upgrades')
-    with open('/etc/apt/apt.conf.d/20auto-upgrades', 'w') as f:
-        f.write('APT::Periodic::Update-Package-Lists "1";\n')
-        f.write('APT::Periodic::Unattended-Upgrade "1";\n')
+    # Must come before uninstall_unused() below, because that removes all
+    # components that have not been required by then.
+    os_update_timers_changed = os_updates.setup(require)
 
     if registry.uninstall_unused():
         _run('supervisorctl update')
         _run('nginx -s reload')
+
+    # Do this last because it can start an update, which may reboot the server:
+    if os_update_timers_changed:
+        os_updates.restart_timers()
 
     server_url = f'https://{primary_domain}' if primary_domain \
         else f'http://{server_ip}'

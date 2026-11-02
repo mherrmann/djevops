@@ -234,8 +234,9 @@ such as for example port 25 when using Postfix for sending emails.
 <summary>Automatic OS updates</summary>
 
 djevops sets up automatic OS updates to keep your server up-to-date and secure.
-This does not apply major version upgrades, which could introduce potentially
-breaking changes.
+The server checks for updates every hour and reboots automatically when an
+update requires it, for example a new kernel. This does not apply major version
+upgrades, which could introduce potentially breaking changes.
 </details>
 
 <details>

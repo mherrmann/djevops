@@ -407,6 +407,25 @@ class OnlineTest(SystemTest):
         output = self._ssh(f'cat /var/log/{service_name}.log')
         self.assertIn(marker, output)
 
+    def test_automatic_os_updates(self):
+        deploy(self.QUIET)
+        apt_config = self._ssh('apt-config dump')
+        self.assertIn(
+            'APT::Periodic::Update-Package-Lists "always";', apt_config
+        )
+        self.assertIn('APT::Periodic::Unattended-Upgrade "always";', apt_config)
+        self.assertIn(
+            'Unattended-Upgrade::Automatic-Reboot "true";', apt_config
+        )
+        self._assert_timer_runs_at('apt-daily', '*-*-* *:00:00')
+        self._assert_timer_runs_at('apt-daily-upgrade', '*-*-* *:30:00')
+
+    def _assert_timer_runs_at(self, timer, calendar):
+        output = self._ssh(
+            f'systemctl show {timer}.timer --property=TimersCalendar'
+        )
+        self.assertIn(f'OnCalendar={calendar} ;', output)
+
     def test_hooks(self):
         marker = f'/root/hooks-ran-{self.test_name}'
         pre_install = Path('deploy/pre-install')
