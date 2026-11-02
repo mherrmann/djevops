@@ -11,11 +11,11 @@ from djevops.util import git, get_apt_install_cmd, prompt_yes_no, \
     run_in_django_shell, run_silently
 from functools import partial
 from os import access, makedirs, remove
-from os.path import basename, dirname, exists, expanduser
+from os.path import basename, dirname, exists, expanduser, join
 from runpy import run_path
 from shlex import quote, split
 from shutil import which
-from subprocess import run
+from subprocess import CalledProcessError, run
 from tempfile import NamedTemporaryFile
 from urllib.parse import urlparse
 
@@ -57,8 +57,7 @@ class CommandError(Exception):
     pass
 
 def init(quiet=False):
-    if not exists('.git'):
-        raise CommandError('This directory is not a Git repository.')
+    _ensure_is_in_git_repo()
     remotes = git('remote').splitlines()
     if not remotes:
         raise CommandError(
@@ -121,6 +120,12 @@ def init(quiet=False):
         print('Created deploy/secrets.py')
         print(f'To deploy your Django app to a server, run: djevops deploy')
 
+def _ensure_is_in_git_repo():
+    try:
+        git('rev-parse', '--git-dir')
+    except CalledProcessError as e:
+        raise CommandError(e.output.strip()) from None
+
 def _get_declared_dependencies():
     if exists('pyproject.toml'):
         with open('pyproject.toml', 'rb') as f:
@@ -167,8 +172,10 @@ def deploy(quiet=False, dry_run=False):
         else:
             ssh('root', server, f'rm -f {remote_path}', quiet)
 
+    manage_py_relpath = join(git('rev-parse', '--show-prefix'), 'manage.py')
     run_with_djevops_venv(
-        'root', server, 'python -u -m djevops.remote.deploy', quiet
+        'root', server,
+        f'python -u -m djevops.remote.deploy {quote(manage_py_relpath)}', quiet
     )
 
 def getbackup(quiet=False, force=False):

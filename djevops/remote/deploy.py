@@ -1,3 +1,4 @@
+from djevops import GIT_HINT
 from djevops.backup import as_cron, parse_sync_interval
 from djevops.remote.component_registry import ComponentRegistry
 from djevops.remote.components import AptPackage, SshKey, Crontab, Hook, \
@@ -25,9 +26,10 @@ from shutil import rmtree, copyfile
 from subprocess import run, CalledProcessError, DEVNULL, Popen
 from time import sleep
 
+import sys
 import yaml
 
-def main():
+def main(manage_py_relpath):
     config = get_deploy_config()
     secrets = get_secrets()
 
@@ -73,7 +75,10 @@ def main():
             pass
         _run(f'git clone -q -b {git_repo_branch} {git_repo_url} /srv/app')
 
-    symlink_force(join(REPO_DIR, 'manage.py'), MANAGE_PY)
+    manage_py = join(REPO_DIR, manage_py_relpath)
+    if not exists(manage_py):
+        error(f'There is no {manage_py} on the server. {GIT_HINT}')
+    symlink_force(manage_py, MANAGE_PY)
 
     require_hook('pre-install')
 
@@ -384,7 +389,7 @@ class Supervisorctl:
 
 if __name__ == '__main__':
     try:
-        main()
+        main(sys.argv[1])
     except CalledProcessError as e:
         output = e.stderr or e.stdout
         error(f'Command failed: {e.cmd}\nOutput: {output}')

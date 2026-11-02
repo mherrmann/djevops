@@ -1,6 +1,7 @@
+from contextlib import chdir
 from djevops.__main__ import init, deploy
 from djevops.util import git
-from os import remove
+from os import makedirs, remove
 from test.base import SystemTest
 from test.util import cd_to_temp_dir, write_pyproject_toml, \
     add_dep_to_pyproject_toml, write_requirements_txt
@@ -18,7 +19,10 @@ class OfflineTest(SystemTest):
         super().tearDown()
 
     def test_init(self):
-        self.expect_init_error('This directory is not a Git repository.')
+        self.expect_init_error(
+            'fatal: not a git repository (or any of the parent directories): '
+            '.git'
+        )
         git('init', '-q')
 
         self.expect_init_error(
@@ -189,3 +193,21 @@ class OfflineTest(SystemTest):
             f"{self.SETTINGS_PY_RELPATH} to 'django.db.backends.postgresql'.\n\n"
             f"Don't forget to commit *and push* your changes to Git."
         )
+
+    def test_project_in_subdirectory(self):
+        git('init', '-q')
+        git('remote', 'add', 'origin', 'https://example.com/repo.git')
+        makedirs('web')
+        with chdir('web'):
+            self.start_django_project()
+            write_requirements_txt([
+                f'Django=={django.get_version()}',
+                f'gunicorn=={self.GUNICORN_VERSION}',
+            ])
+            self.add_to_settings(
+                ["ALLOWED_HOSTS = ['example.com']"], do_commit=False
+            )
+            init(quiet=True)
+            with self.update_deploy_yml() as deploy_yml:
+                deploy_yml['server'] = '1.2.3.4'
+            deploy(self.QUIET, dry_run=True)
