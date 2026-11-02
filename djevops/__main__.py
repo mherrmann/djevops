@@ -4,6 +4,7 @@ from djevops.backup import as_cron, parse_sync_interval
 from djevops.config import get_backup_config, get_services_users_envs, \
     get_django_service, SQLITE_DB_FILE
 from djevops.litestream import get_litestream_config
+from djevops.remote.actions import MANAGE_SH
 from djevops.remote.scaffold import DEPLOY_CONFIG_PATH, HOOK_NAMES, \
     SECRETS_PATH, STATE_DIR, get_hook_path
 from djevops.util import git, get_apt_install_cmd, prompt_yes_no, \
@@ -237,8 +238,7 @@ def shell():
     except LookupError:
         raise CommandError('No Django service found in deploy/djevops.yml')
     server = config['server']
-    remote_cmd = 'cd /srv/app && exec python manage.py shell'
-    su_cmd = f'su - {django_service_name} -c {quote(remote_cmd)}'
+    su_cmd = f'su - {django_service_name} -c {quote(MANAGE_SH + " shell")}'
     ssh_cmd = get_ssh_command()
     run(f'{ssh_cmd} -t root@{server} {quote(su_cmd)}', shell=True)
 
