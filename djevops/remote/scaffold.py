@@ -1,9 +1,15 @@
-from os.path import join
+from os.path import dirname, join, realpath
 
 import json
 import os
 import pickle
 import yaml
+
+REPO_DIR = '/srv/app'
+# manage.py may not lie at the top level of the Git repository. This symlink
+# records where it is. Resolve the symlink before starting anything. Otherwise,
+# path calculations in the Django app can see the wrong parent directory.
+MANAGE_PY = '/srv/manage.py'
 
 STATE_DIR = '/root/.djevops'
 DEPLOY_CONFIG_PATH = join(STATE_DIR, 'deploy.yml')
@@ -47,3 +53,6 @@ def save_components(components):
 
 def get_hook_path(name):
     return join(STATE_DIR, name)
+
+def get_django_project_dir():
+    return dirname(realpath(MANAGE_PY))

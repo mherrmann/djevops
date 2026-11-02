@@ -2,6 +2,10 @@
 
 set -eo pipefail
 
+# We use realpath because /srv/manage.py is a symlink. Without it, we would run
+# Gunicorn from /srv and search all of /srv for wsgi.py.
+cd "$(dirname "$(realpath /srv/manage.py)")"
+
 SOCKFILE=/var/run/djevops/$1.sock
 
 # Create the run directory if it doesn't exist

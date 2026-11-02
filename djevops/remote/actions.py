@@ -1,21 +1,23 @@
 from djevops.config import get_services_users_envs, get_django_service
-from djevops.remote.scaffold import get_deploy_config, get_secrets, get_uv_env
+from djevops.remote.scaffold import MANAGE_PY, get_deploy_config, \
+    get_django_project_dir, get_secrets, get_uv_env
 from djevops.util import run_in_django_shell, run_silently
-from os.path import exists
+from os.path import exists, join, realpath
 
 import json
 
 MANAGE_SH = '/opt/djevops/bin/manage.sh'
 
 def install_python_deps():
-    if exists('/srv/app/pyproject.toml'):
+    project_dir = get_django_project_dir()
+    if exists(join(project_dir, 'pyproject.toml')):
         cmd = 'UV_PROJECT_ENVIRONMENT=/srv/venv uv sync -q --no-install-project'
     else:
         cmd = 'uv pip install -q --python /srv/venv/bin/python -r ' \
               'requirements.txt'
     # We need to pass get_uv_env in case the project's .python-version has
     # changed.
-    run_silently(f'cd /srv/app && {cmd}', shell=True, env=get_uv_env())
+    run_silently(cmd, shell=True, cwd=project_dir, env=get_uv_env())
 
 def migrate_db():
     _run_manage_sh('migrate')
@@ -40,7 +42,11 @@ def get_django_settings(setting_names, env=None):
         'from django.conf import settings',
         'import json',
         f'print(json.dumps({{{items}}}))'],
-        '/srv/venv/bin/python', '/srv/app/manage.py', env
+        '/srv/venv/bin/python',
+        # We use realpath(...) because manage.py would otherwise see the symlink
+        # as its __file__ and calculate paths relative to where the symlink is.
+        realpath(MANAGE_PY),
+        env
     )
     return json.loads(settings_json)
 

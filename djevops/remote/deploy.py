@@ -13,13 +13,13 @@ from djevops.remote.actions import install_python_deps, migrate_db, \
     collect_static_files, get_django_setting, get_django_settings
 from djevops.remote.nginx import get_header_name_from_meta_key, \
     get_nginx_size_from_bytes
-from djevops.remote.scaffold import DJEVOPS_PYTHON, get_deploy_config, \
-    get_hook_path, get_secrets
+from djevops.remote.scaffold import DJEVOPS_PYTHON, MANAGE_PY, REPO_DIR, \
+    get_deploy_config, get_hook_path, get_secrets
 from djevops.remote.util import chown, ensure_group_exists, run as _run, \
     symlink_force
 from djevops.util import is_domain, log, error
 from os import chmod, makedirs
-from os.path import exists
+from os.path import exists, join
 from shlex import quote
 from shutil import rmtree, copyfile
 from subprocess import run, CalledProcessError, DEVNULL, Popen
@@ -72,6 +72,8 @@ def main():
         except FileNotFoundError:
             pass
         _run(f'git clone -q -b {git_repo_branch} {git_repo_url} /srv/app')
+
+    symlink_force(join(REPO_DIR, 'manage.py'), MANAGE_PY)
 
     require_hook('pre-install')
 
