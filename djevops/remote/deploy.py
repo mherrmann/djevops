@@ -21,7 +21,7 @@ from djevops.remote.util import chown, ensure_group_exists, run as _run, \
     symlink_force
 from djevops.util import is_domain, log, error
 from os import chmod, makedirs
-from os.path import exists, join
+from os.path import exists, join, realpath
 from shlex import quote
 from shutil import rmtree, copyfile
 from subprocess import run, CalledProcessError, DEVNULL, Popen
@@ -90,7 +90,9 @@ def main(manage_py_relpath):
     require(VirtualEnvironment('/srv/venv'))
 
     log('Installing Python dependencies...')
+    python_before = realpath('/srv/venv/bin/python')
     install_python_deps()
+    python_changed = realpath('/srv/venv/bin/python') != python_before
 
     install_if_not_installed('nginx')
 
@@ -330,7 +332,8 @@ def main(manage_py_relpath):
     for program_name, user, hup_eligible in programs:
         if program_name in updated_services:
             continue
-        if hup_eligible and user not in changed_bashrcs:
+        if hup_eligible and user not in changed_bashrcs \
+                and not python_changed:
             try:
                 _run(['supervisorctl', 'signal', 'HUP', program_name])
             except CalledProcessError as e:
