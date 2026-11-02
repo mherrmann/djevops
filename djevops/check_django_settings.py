@@ -1,5 +1,7 @@
 from django.conf import settings, global_settings
+from django.core.files.storage import default_storage
 from djevops import GIT_HINT
+from djevops.media import get_public_media_url
 from djevops.util import is_domain, is_ip
 
 import os
@@ -12,6 +14,7 @@ def main(server_ip, db_type, mail_configured):
     check_staticfiles()
     if db_type:
         check_databases(db_type)
+    check_media()
     if mail_configured:
         check_server_email()
 
@@ -71,6 +74,28 @@ def check_sqlite():
             "value of environment variable SQLITE_DB_FILE. A good expression "
             "is:\n"
             "    os.getenv('SQLITE_DB_FILE') or <what you had before>"
+        )
+
+def check_media():
+    media_url = get_public_media_url()
+    if not media_url:
+        return
+    media_root = os.getenv('MEDIA_ROOT')
+    if media_root.endswith('/'):
+        error(
+            'Please remove the trailing slash from MEDIA_ROOT in '
+            'deploy/djevops.yml.'
+        )
+    if default_storage.location != media_root:
+        error(
+            f'Because Django setting MEDIA_URL is {media_url!r}, djevops '
+            'makes all files in MEDIA_ROOT publicly accessible at that URL. '
+            'Please set Django setting MEDIA_ROOT to the value of environment '
+            f'variable MEDIA_ROOT. For example, in {SETTINGS_PY}:\n\n'
+            '    import os\n'
+            '    MEDIA_ROOT = os.getenv("MEDIA_ROOT") or <what you had before>'
+            '\n\n'
+            'If your uploads must stay private, then remove MEDIA_URL instead.'
         )
 
 def check_server_email():

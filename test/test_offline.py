@@ -186,6 +186,37 @@ class OfflineTest(SystemTest):
 
         expect_deploy_to_succeed()
 
+        self.add_to_settings(["MEDIA_URL = '/media/'"])
+
+        self.expect_deploy_error(
+            "Because Django setting MEDIA_URL is '/media/', djevops makes all "
+            "files in MEDIA_ROOT publicly accessible at that URL. Please set "
+            "Django setting MEDIA_ROOT to the value of environment variable "
+            f"MEDIA_ROOT. For example, in {self.SETTINGS_PY_RELPATH}:\n\n"
+            '    import os\n'
+            '    MEDIA_ROOT = os.getenv("MEDIA_ROOT") or <what you had before>'
+            "\n\n"
+            "If your uploads must stay private, then remove MEDIA_URL instead."
+            "\n\nDon't forget to commit *and push* your changes to Git."
+        )
+
+        self.add_to_settings(["MEDIA_ROOT = os.getenv('MEDIA_ROOT')"])
+
+        expect_deploy_to_succeed()
+
+        with self.update_deploy_yml() as deploy_yml:
+            env = deploy_yml['services']['web']['env']['clear']
+            env['MEDIA_ROOT'] = '/srv/uploads/'
+
+        self.expect_deploy_error(
+            "Please remove the trailing slash from MEDIA_ROOT in "
+            "deploy/djevops.yml.\n\n"
+            "Don't forget to commit *and push* your changes to Git."
+        )
+
+        with self.update_deploy_yml() as deploy_yml:
+            del deploy_yml['services']['web']['env']['clear']['MEDIA_ROOT']
+
         with self.update_deploy_yml() as deploy_yml:
             deploy_yml['db'] = {'type': 'postgres'}
         self.expect_deploy_error(

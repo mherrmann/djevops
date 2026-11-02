@@ -5,6 +5,7 @@ _DEFAULT_PATH = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
 DEFAULT_ENV = {
     'SQLITE_DB_FILE': SQLITE_DB_FILE,
     'STATIC_ROOT': '/srv/static',
+    'MEDIA_ROOT': '/srv/media',
     'PATH': '/srv/venv/bin:' + _DEFAULT_PATH,
 }
 
