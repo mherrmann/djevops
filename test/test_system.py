@@ -98,11 +98,10 @@ class OnlineTest(SystemTest):
 
             cls.server_hostname = f'{cls.test_name}.{DNSIMPLE_TEST_DOMAIN}'
             cls.cleanup_actions.append(cls._delete_db_backups_from_s3)
+            cls.cleanup_actions.append(cd_to_temp_dir())
             cls.cleanup_actions.append(
                 lambda: cls._delete_remote_branch_if_exists(cls.test_name)
             )
-            restore_cwd = cd_to_temp_dir()
-            cls.cleanup_actions.append(restore_cwd)
             cls.init_test_app()
         except:
             cls.tearDownClass()
