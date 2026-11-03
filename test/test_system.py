@@ -2,8 +2,9 @@ from contextlib import closing
 from djevops.__main__ import init, deploy, getbackup
 from djevops.config import SQLITE_DB_FILE
 from djevops.remote.actions import MANAGE_SH
+from djevops.remote.scaffold import DJEVOPS_PYTHON
 from djevops import s3
-from djevops.util import git, run_silently
+from djevops.util import get_apt_install_cmd, git, run_silently
 from os import remove
 from os.path import basename
 from pathlib import Path
@@ -505,6 +506,19 @@ class OnlineTest(SystemTest):
         self._deploy_with_settings(["MEDIA_URL = ''"])
         self._create_media_file('a.txt', 'Hello')
         self.assertEqual(404, self._http_get('media/a.txt').status_code)
+
+    def test_apt_waits_for_lock(self):
+        deploy(self.QUIET)
+        hold_lock = (
+            "import fcntl, time; f = open('/var/lib/dpkg/lock-frontend', 'w'); "
+            "fcntl.lockf(f, fcntl.LOCK_EX); time.sleep(6)"
+        )
+        self._ssh(
+            f'nohup {DJEVOPS_PYTHON} -c {quote(hold_lock)} >/dev/null 2>&1 &'
+        )
+        sleep(2)
+        # This raises an exception if apt-get does not wait for the lock.
+        self._ssh(get_apt_install_cmd('cowsay'))
 
     def _deploy_with_public_media(self, media_url):
         self._deploy_with_settings([

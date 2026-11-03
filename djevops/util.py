@@ -8,6 +8,10 @@ import sys
 TERMINAL_COLOR_SUCCESS = 93
 TERMINAL_COLOR_ERROR = 91
 
+# Automatic OS updates can hold apt's lock for several minutes. We wait for them
+# because otherwise, apt-get fails right away.
+APT_GET = 'apt-get -o DPkg::Lock::Timeout=600'
+
 def copy_with_replace(source, target, replacements):
     with open(source, 'r') as f:
         content = f.read()
@@ -48,7 +52,7 @@ def get_apt_install_cmd(*packages):
     packages_str = ' '.join(packages)
     install_cmd = \
         f'DEBIAN_FRONTEND=noninteractive ' \
-        f'apt-get install -yqq {packages_str} >/dev/null 2>&1'
+        f'{APT_GET} install -yqq {packages_str} >/dev/null 2>&1'
     # Use `dpkg -s` to check if the packages are already installed, because it
     # is faster than apt-get. Also call `apt-get update`, but only if necessary.
     return (
