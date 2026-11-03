@@ -45,7 +45,7 @@ def write_requirements_txt(deps):
             f.write(dep + '\n')
 
 def wait_for_server_to_be_ready(
-    user, host, ssh_key_path, known_hosts_file, timeout_secs=90
+    user, host, ssh_key_path, known_hosts_file, timeout_secs=120
 ):
     end_time = monotonic() + timeout_secs
     while monotonic() < end_time:
