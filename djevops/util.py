@@ -24,10 +24,10 @@ def git(*args):
     return run_silently(['git', *args])
 
 def run_in_django_shell(
-    cmds, executable=sys.executable, manage_py='manage.py', env=None
+    cmds, executable=sys.executable, manage_py='manage.py', env=None, **kwargs
 ):
     args = [executable, manage_py, 'shell', '-v', '0', '-c', ' ; '.join(cmds)]
-    return run_silently(args, env=env)
+    return run_silently(args, env=env, **kwargs)
 
 def run_silently(*args, **kwargs):
     # Only return stdout. Stderr may contain noise such as SyntaxWarnings

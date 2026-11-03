@@ -109,6 +109,7 @@ def main(manage_py_relpath):
     server_email = ''
     service_domains = {}
     services_users_envs = get_services_users_envs(config, secrets)
+    django_user = django_env = None
     changed_bashrcs = set()
     programs = []
     services = config['services']
@@ -135,10 +136,13 @@ def main(manage_py_relpath):
             changed_bashrcs.add(user)
         service = services[service_name]
         if service['type'] == 'django':
+            if django_user is None:
+                django_user = user
+                django_env = env
             django_settings = get_django_settings([
                 'ADMINS', 'ALLOWED_HOSTS', 'DATA_UPLOAD_MAX_MEMORY_SIZE',
                 'SECURE_PROXY_SSL_HEADER', 'SERVER_EMAIL'
-            ], env)
+            ], user, env)
             domains = [
                 host for host in django_settings['ALLOWED_HOSTS']
                 if is_domain(host)
@@ -163,7 +167,7 @@ def main(manage_py_relpath):
                 '$PROXY_SSL_HEADER': '',
                 '$MEDIA_LOCATION': '',
             }
-            media_url = get_public_media_url(env)
+            media_url = get_public_media_url(user, env)
             if media_url:
                 media_root = env['MEDIA_ROOT']
                 makedirs(media_root, exist_ok=True)
@@ -273,13 +277,15 @@ def main(manage_py_relpath):
         backup_config = get_backup_config(config, secrets)
         if db_type == 'postgres':
             install_if_not_installed('postgresql')
-            db_config = get_django_setting('DATABASES')['default']
+            db_config = get_django_setting(
+                'DATABASES', django_user, django_env
+            )['default']
             db_existed = postgres.provision(db_config)
             if backup_config and not db_existed:
                 log('Restoring database backup...')
                 postgres.restore(db_config, backup_config)
             log('Migrating database...')
-            migrate_db()
+            migrate_db(django_user, django_env)
             if backup_config:
                 sync_interval_str = backup_config.get('sync-interval', '24h')
                 sync_interval_secs = parse_sync_interval(sync_interval_str)
@@ -296,10 +302,11 @@ def main(manage_py_relpath):
                 if not exists(SQLITE_DB_FILE):
                     log('Restoring database backup...')
                     _run(['litestream', 'restore', SQLITE_DB_FILE])
+                    # The migration below does not run as root.
+                    _make_sqlite_db_accessible()
             log('Migrating database...')
-            migrate_db()
-            chown(SQLITE_DB_FILE, group_name=SERVICES_GROUP)
-            chmod(SQLITE_DB_FILE, 0o660)
+            migrate_db(django_user, django_env)
+            _make_sqlite_db_accessible()
             if backup_config:
                 # Do this after migrating the database and chowning the file in
                 # order to avoid race conditions.
@@ -310,7 +317,10 @@ def main(manage_py_relpath):
     makedirs('/srv/static', exist_ok=True)
 
     log('Collecting static files...')
-    collect_static_files()
+    _run(['chown', '-R', django_user, '/srv/static'])
+    collect_static_files(django_user, django_env)
+    # This ensures that only deploys can change the static files.
+    _run(['chown', '-R', 'root:root', '/srv/static'])
 
     log('Initializing run/ directory...')
     _run('/opt/djevops/bin/init-run-dir.sh')
@@ -386,6 +396,10 @@ def main(manage_py_relpath):
     server_url = f'https://{primary_domain}' if primary_domain \
         else f'http://{server_ip}'
     log(f'The server is now serving requests at {server_url}.')
+
+def _make_sqlite_db_accessible():
+    chown(SQLITE_DB_FILE, group_name=SERVICES_GROUP)
+    chmod(SQLITE_DB_FILE, 0o660)
 
 def debconf_set_selections(value):
     run(['debconf-set-selections'], input=value + '\n', text=True, check=True)

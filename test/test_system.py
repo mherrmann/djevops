@@ -328,6 +328,10 @@ class OnlineTest(SystemTest):
         )
         self.assertEqual(200, response.status_code)
         self.assertEqual(test_content, response.text)
+        self.assertEqual(
+            'root',
+            self._ssh(f'stat -c %U /srv/{test_txt_relpath}').strip()
+        )
 
     def test_media_files(self):
         # A service that adds to its environment runs as a separate user.
@@ -506,6 +510,15 @@ class OnlineTest(SystemTest):
         self._deploy_with_settings(["MEDIA_URL = ''"])
         self._create_media_file('a.txt', 'Hello')
         self.assertEqual(404, self._http_get('media/a.txt').status_code)
+
+    def test_django_runs_as_service_user_during_deploy(self):
+        # An app may create a file whenever Django starts. If a deploy created
+        # it as root, then the service could not access it later.
+        path = '/tmp/djevops-file-created-by-django'
+        self._deploy_with_settings([
+            f"open({path!r}, 'a').close()"
+        ])
+        self.assertEqual('web', self._ssh(f'stat -c %U {path}').strip())
 
     def test_apt_waits_for_lock(self):
         deploy(self.QUIET)

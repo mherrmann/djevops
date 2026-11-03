@@ -1,5 +1,6 @@
 from djevops import s3
-from djevops.config import get_backup_config
+from djevops.config import get_backup_config, get_django_service, \
+    get_services_users_envs
 from djevops.remote.actions import get_django_setting
 from djevops.remote.scaffold import get_deploy_config, get_secrets
 from djevops.remote.util import run as _run
@@ -14,7 +15,7 @@ def main():
     command = sys.argv[1] if len(sys.argv) > 1 else 'backup'
     config = get_deploy_config()
     secrets = get_secrets()
-    db_config = get_django_setting('DATABASES')['default']
+    db_config = _get_db_config(config, secrets)
     if command == 'dump':
         _pg_dump(db_config, sys.stdout)
     elif command == 'backup':
@@ -65,6 +66,11 @@ def backup(db_config, backup_config):
         s3.upload(backup_config, dump_file.name, remote_path)
     finally:
         remove(dump_file.name)
+
+def _get_db_config(config, secrets):
+    django_service = get_django_service(config)[0]
+    user, env = get_services_users_envs(config, secrets)[django_service]
+    return get_django_setting('DATABASES', user, env)['default']
 
 def _pg_dump(db_config, output):
     run(
