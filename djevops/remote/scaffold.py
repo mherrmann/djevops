@@ -11,6 +11,9 @@ REPO_DIR = '/srv/app'
 # path calculations in the Django app can see the wrong parent directory.
 MANAGE_PY = '/srv/manage.py'
 
+# All services are in this group. It lets them access each other's files.
+SERVICES_GROUP = 'djevops'
+
 STATE_DIR = '/root/.djevops'
 DEPLOY_CONFIG_PATH = join(STATE_DIR, 'deploy.yml')
 SECRETS_PATH = join(STATE_DIR, 'secrets.json')

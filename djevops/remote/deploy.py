@@ -16,7 +16,7 @@ from djevops.remote.actions import install_python_deps, migrate_db, \
 from djevops.remote.nginx import get_header_name_from_meta_key, \
     get_media_location, get_nginx_size_from_bytes
 from djevops.remote.scaffold import DJEVOPS_PYTHON, MANAGE_PY, REPO_DIR, \
-    get_deploy_config, get_hook_path, get_secrets
+    SERVICES_GROUP, get_deploy_config, get_hook_path, get_secrets
 from djevops.remote.util import chown, ensure_group_exists, run as _run, \
     symlink_force
 from djevops.util import is_domain, log, error
@@ -98,10 +98,9 @@ def main(manage_py_relpath):
 
     makedirs('/etc/nginx/includes', exist_ok=True)
 
-    django_group = 'django'
-    ensure_group_exists(django_group)
+    ensure_group_exists(SERVICES_GROUP)
     makedirs('/var/lib/djevops', exist_ok=True)
-    chown('/var/lib/djevops', group_name=django_group)
+    chown('/var/lib/djevops', group_name=SERVICES_GROUP)
     chmod('/var/lib/djevops', 0o770)
 
     log('Configuring services...')
@@ -132,7 +131,7 @@ def main(manage_py_relpath):
             ))
             programs.append((name, user, hup_eligible))
 
-        if require(ServiceUser(user, env, django_group)):
+        if require(ServiceUser(user, env, SERVICES_GROUP)):
             changed_bashrcs.add(user)
         service = services[service_name]
         if service['type'] == 'django':
@@ -168,7 +167,7 @@ def main(manage_py_relpath):
             if media_url:
                 media_root = env['MEDIA_ROOT']
                 makedirs(media_root, exist_ok=True)
-                chown(media_root, group_name=django_group)
+                chown(media_root, group_name=SERVICES_GROUP)
                 # Others need to read so Nginx can serve the files. The setgid
                 # bit gives new files the group that all services are in.
                 chmod(media_root, 0o2775)
@@ -299,7 +298,7 @@ def main(manage_py_relpath):
                     _run(['litestream', 'restore', SQLITE_DB_FILE])
             log('Migrating database...')
             migrate_db()
-            chown(SQLITE_DB_FILE, group_name=django_group)
+            chown(SQLITE_DB_FILE, group_name=SERVICES_GROUP)
             chmod(SQLITE_DB_FILE, 0o660)
             if backup_config:
                 # Do this after migrating the database and chowning the file in
