@@ -7,8 +7,8 @@ from djevops.litestream import get_litestream_config
 from djevops.remote.actions import MANAGE_SH
 from djevops.remote.scaffold import DEPLOY_CONFIG_PATH, HOOK_NAMES, \
     SECRETS_PATH, STATE_DIR, get_hook_path
-from djevops.util import git, get_apt_install_cmd, prompt_yes_no, \
-    run_in_django_shell, run_silently
+from djevops.util import git, get_apt_install_cmd, \
+    get_initial_apt_update_cmd, prompt_yes_no, run_in_django_shell, run_silently
 from functools import partial
 from os import access, makedirs, remove
 from os.path import basename, dirname, exists, expanduser, join
@@ -328,6 +328,7 @@ def check_config(deploy_config, secrets):
 
 def install_djevops_on_server(user, host, quiet):
     ssh_ = lambda cmd: ssh(user, host, cmd, quiet)
+    ssh_(get_initial_apt_update_cmd())
     ssh_(get_apt_install_cmd('rsync'))
     ssh_(
         'command -v uv >/dev/null 2>&1 || '

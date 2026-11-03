@@ -50,14 +50,21 @@ class CalledProcessErrorShowingOutput(CalledProcessError):
 
 def get_apt_install_cmd(*packages):
     packages_str = ' '.join(packages)
-    install_cmd = \
-        f'DEBIAN_FRONTEND=noninteractive ' \
-        f'{APT_GET} install -yqq {packages_str} >/dev/null 2>&1'
     # Use `dpkg -s` to check if the packages are already installed, because it
-    # is faster than apt-get. Also call `apt-get update`, but only if necessary.
+    # is faster than apt-get.
     return (
-        'dpkg -s %s >/dev/null 2>&1 || { %s || { apt-get update -qq && %s; }; }'
-        % (packages_str, install_cmd, install_cmd)
+        f'dpkg -s {packages_str} >/dev/null 2>&1 || '
+        f'DEBIAN_FRONTEND=noninteractive '
+        f'{APT_GET} install -yqq {packages_str} >/dev/null 2>&1'
+    )
+
+def get_initial_apt_update_cmd():
+    # New servers have no package lists. After that, the OS's timers keep them
+    # up to date. We retry because the timers may be updating the lists at this
+    # moment, and apt-get update does not wait for this like other commands do.
+    return (
+        'ls /var/lib/apt/lists/*_Packages* >/dev/null 2>&1 || '
+        'apt-get update -qq || { sleep 30 && apt-get update -qq; }'
     )
 
 def is_domain(host):
