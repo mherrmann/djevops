@@ -248,12 +248,18 @@ class Litestream(Component):
         self.version = '0.5.16'
 
     def install(self):
-        deb_path, _ = urlretrieve(self._deb_url)
-        # The .deb ships /etc/litestream.yml as a conffile. Djevops overwrites
-        # that file, so upgrades would prompt for it. Keep our version:
-        _run(['dpkg', '-i', '--force-confdef', '--force-confold', deb_path])
-        remove(deb_path)
-        # `dpkg -i` does not restart an already-running Litestream:
+        with TemporaryDirectory() as temp_dir:
+            deb_path = join(temp_dir, 'litestream.deb')
+            urlretrieve(self._deb_url, deb_path)
+            # The .deb ships /etc/litestream.yml as a conffile. Djevops
+            # overwrites that file, so upgrades would prompt for it. Keep our
+            # version:
+            _run(
+                f'{APT_GET} install -yqq --allow-downgrades '
+                '-o Dpkg::Options::=--force-confdef '
+                f'-o Dpkg::Options::=--force-confold {deb_path}'
+            )
+        # Installing the .deb does not restart an already-running Litestream:
         _run('systemctl try-restart litestream')
 
     def uninstall(self):
