@@ -231,6 +231,25 @@ such as for example port 25 when using Postfix for sending emails.
 </details>
 
 <details>
+<summary>Serving uploaded files</summary>
+
+If you want to serve files that your users uploaded, then add this to your
+Django settings:
+
+```
+import os
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.getenv('MEDIA_ROOT') or BASE_DIR / 'media'
+```
+
+**Anybody who knows a file's URL can then download it.** If your uploads must
+stay private, then do not set `MEDIA_URL`, or add a Django view at that URL that
+enforces access control.
+
+djevops does not back up uploaded files.
+</details>
+
+<details>
 <summary>Automatic OS updates</summary>
 
 djevops sets up automatic OS updates to keep your server up-to-date and secure.

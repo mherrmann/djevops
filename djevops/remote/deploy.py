@@ -11,9 +11,10 @@ from djevops.config import get_backup_config, get_services_users_envs, \
 from djevops.litestream import get_litestream_config
 from djevops.remote import os_updates, postgres
 from djevops.remote.actions import install_python_deps, migrate_db, \
-    collect_static_files, get_django_setting, get_django_settings
+    collect_static_files, get_django_setting, get_django_settings, \
+    get_public_media_url
 from djevops.remote.nginx import get_header_name_from_meta_key, \
-    get_nginx_size_from_bytes
+    get_media_location, get_nginx_size_from_bytes
 from djevops.remote.scaffold import DJEVOPS_PYTHON, MANAGE_PY, REPO_DIR, \
     get_deploy_config, get_hook_path, get_secrets
 from djevops.remote.util import chown, ensure_group_exists, run as _run, \
@@ -159,7 +160,18 @@ def main(manage_py_relpath):
                 '$SERVICE': service_name,
                 '$USER': user,
                 '$PROXY_SSL_HEADER': '',
+                '$MEDIA_LOCATION': '',
             }
+            media_url = get_public_media_url(env)
+            if media_url:
+                media_root = env['MEDIA_ROOT']
+                makedirs(media_root, exist_ok=True)
+                chown(media_root, group_name=django_group)
+                # Others need to read so Nginx can serve the files. The setgid
+                # bit gives new files the group that all services are in.
+                chmod(media_root, 0o2775)
+                replacements['$MEDIA_LOCATION'] = \
+                    get_media_location(media_url, media_root)
             ssl_header_tpl = django_settings['SECURE_PROXY_SSL_HEADER']
             if ssl_header_tpl:
                 header_name = get_header_name_from_meta_key(ssl_header_tpl[0])

@@ -328,6 +328,28 @@ class OnlineTest(SystemTest):
         self.assertEqual(200, response.status_code)
         self.assertEqual(test_content, response.text)
 
+    def test_media_files(self):
+        # A service that adds to its environment runs as a separate user.
+        with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['services']['uploader'] = {
+                'type': 'command',
+                'command': 'mkdir -p /srv/media/album && exec sleep infinity',
+                'env': {'inherit': 'web', 'clear': {'IS_UPLOADER': 'True'}}
+            }
+        self._deploy_with_public_media('/media/')
+        self._create_media_file('album/a.txt', 'Hello', 'web')
+        response = self._assert_http_text('media/album/a.txt', 'Hello')
+        self.assertEqual('nosniff', response.headers['X-Content-Type-Options'])
+        self.assertIn('sandbox', response.headers['Content-Security-Policy'])
+        self.assertEqual(403, self._http_get('media/album/').status_code)
+        # Check that another user can add files to a directory that web created,
+        # and that those files are then public via HTTP.
+        self._execute_remote_django_shell(
+            ["import os", "os.mkdir('/srv/media/from-web')"], 'web'
+        )
+        self._create_media_file('from-web/a.txt', 'Hello', 'uploader')
+        self._assert_http_text('media/from-web/a.txt', 'Hello')
+
     def test_celery(self):
         add_dep_to_pyproject_toml(f'celery[redis]=={celery.__version__}')
         commit('pyproject.toml', 'Add celery')
@@ -458,6 +480,58 @@ class OnlineTest(SystemTest):
     def _write_hook(self, path, *lines):
         path.write_text('#!/bin/bash -e\n' + '\n'.join(lines))
         path.chmod(path.stat().st_mode | S_IXUSR)
+
+    def test_media_files_not_served_if_django_view_exists(self):
+        urls_py = f'{self.DJANGO_PROJECT_NAME}/urls.py'
+        # Other tests check for Django's "The install worked" page. Django only
+        # shows it if urls.py is unchanged.
+        original_urls_py = Path(urls_py).read_text()
+        def restore_urls_py():
+            Path(urls_py).write_text(original_urls_py)
+            commit(urls_py, 'Restore urls.py')
+        self.addCleanup(restore_urls_py)
+        with open(urls_py, 'a') as f:
+            f.write(
+                "\nfrom django.http import HttpResponse\n"
+                "urlpatterns += [path('private/<path:name>', "
+                "lambda request, name: HttpResponse('From Django'))]\n"
+            )
+        commit(urls_py, 'Add a view for media files')
+        self._deploy_with_public_media('/private/')
+        self._create_media_file('a.txt', 'From Nginx')
+        self._assert_http_text('private/a.txt', 'From Django')
+
+    def test_media_files_not_served_without_media_url(self):
+        self._deploy_with_settings(["MEDIA_URL = ''"])
+        self._create_media_file('a.txt', 'Hello')
+        self.assertEqual(404, self._http_get('media/a.txt').status_code)
+
+    def _deploy_with_public_media(self, media_url):
+        self._deploy_with_settings([
+            f"MEDIA_URL = {media_url!r}",
+            "MEDIA_ROOT = os.getenv('MEDIA_ROOT')"
+        ])
+
+    def _deploy_with_settings(self, lines):
+        self.add_to_settings(lines)
+        git('push')
+        deploy(self.QUIET)
+
+    def _create_media_file(self, name, contents, user='root'):
+        self._ssh(
+            'mkdir -p /srv/media && '
+            f'echo -n {quote(contents)} > /srv/media/{name}',
+            user
+        )
+
+    def _assert_http_text(self, path, expected_text):
+        result = self._http_get(path)
+        self.assertEqual(200, result.status_code)
+        self.assertEqual(expected_text, result.text)
+        return result
+
+    def _http_get(self, path):
+        return requests.get(f'http://{self.server_ip}/{path}')
 
     def _configure_sqlite(self):
         with self.update_deploy_yml() as deploy_yml:

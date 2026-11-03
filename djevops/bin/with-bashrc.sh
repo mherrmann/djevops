@@ -7,4 +7,9 @@
 export USER=$(getent passwd | cut -d : -f 1,3 | grep ":$(id -u)$" | cut -d : -f 1)
 export HOME=$(getent passwd $USER | cut -d : -f 6)
 source $HOME/.bashrc
+
+# Services can run as different users in one group. This lets them write to
+# directories that another service created, for example for uploaded files.
+umask 002
+
 exec "$@"

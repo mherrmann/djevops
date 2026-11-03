@@ -37,18 +37,35 @@ def get_django_settings(setting_names, env=None):
     if env is None:
         env = _get_django_env()
     items = ', '.join(f'{name!r}: settings.{name}' for name in setting_names)
+    return _eval_in_django_shell(
+        'from django.conf import settings', f'{{{items}}}', env
+    )
+
+def get_public_media_url(env):
+    # djevops may not be installed in the Django app's venv. We could `import`
+    # from djevops in the call below. But it would pollute (and potentially
+    # clash with) the Django app's namespace. We therefore use run_path(...)
+    # instead. This requires that media.py has no dependencies other than Django
+    # and the standard library.
+    return _eval_in_django_shell(
+        'from runpy import run_path',
+        "run_path('/opt/djevops/media.py')['get_public_media_url']()",
+        env
+    )
+
+def _eval_in_django_shell(import_statement, expression, env):
     # Use json because it seems a little safer than eval()
-    settings_json = run_in_django_shell([
-        'from django.conf import settings',
+    result_json = run_in_django_shell([
+        import_statement,
         'import json',
-        f'print(json.dumps({{{items}}}))'],
+        f'print(json.dumps({expression}))'],
         '/srv/venv/bin/python',
         # We use realpath(...) because manage.py would otherwise see the symlink
         # as its __file__ and calculate paths relative to where the symlink is.
         realpath(MANAGE_PY),
         env
     )
-    return json.loads(settings_json)
+    return json.loads(result_json)
 
 def _run_manage_sh(*args):
     run_silently([MANAGE_SH] + list(args), env=_get_django_env())
