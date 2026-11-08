@@ -164,7 +164,6 @@ def main(manage_py_relpath):
                 '$SERVER_NAME': ' '.join(domains) or server_ip,
                 '$SERVICE': service_name,
                 '$USER': user,
-                '$PROXY_SSL_HEADER': '',
                 '$MEDIA_LOCATION': '',
             }
             media_url = get_public_media_url(user, env)
@@ -177,14 +176,19 @@ def main(manage_py_relpath):
                 chmod(media_root, 0o2775)
                 replacements['$MEDIA_LOCATION'] = \
                     get_media_location(media_url, media_root)
+            proxy_ssl_header = ''
             ssl_header_tpl = django_settings['SECURE_PROXY_SSL_HEADER']
             if ssl_header_tpl:
                 header_name = get_header_name_from_meta_key(ssl_header_tpl[0])
-                replacements['$PROXY_SSL_HEADER'] = \
-                    f'proxy_set_header {header_name} $scheme;'
+                proxy_ssl_header = f'proxy_set_header {header_name} $scheme;'
+            require(TemplatedFile(
+                f'/etc/nginx/includes/{service_name}-django',
+                '/opt/djevops/conf/nginx/django',
+                {'$SERVICE': service_name, '$PROXY_SSL_HEADER': proxy_ssl_header}
+            ))
             require(NginxSite(
                 service_name,
-                '/opt/djevops/conf/nginx/django',
+                '/opt/djevops/conf/nginx/site',
                 replacements
             ))
             # Placeholder until Certbot runs. Create it only if absent so we
