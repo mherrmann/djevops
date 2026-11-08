@@ -380,7 +380,7 @@ def main(manage_py_relpath):
     if any_service_failed:
         error('Some services failed to start. See logs above.')
 
-    _run('nginx -s reload')
+    _reload_nginx()
 
     symlink_force('/opt/djevops/bin/cronic', '/usr/bin/cronic')
     require(Crontab(cron_jobs, mailto=admin_email))
@@ -391,7 +391,7 @@ def main(manage_py_relpath):
 
     if registry.uninstall_unused():
         _run('supervisorctl update')
-        _run('nginx -s reload')
+        _reload_nginx()
 
     # Do this last because it can start an update, which may reboot the server:
     if os_update_timers_changed:
@@ -400,6 +400,12 @@ def main(manage_py_relpath):
     server_url = f'https://{primary_domain}' if primary_domain \
         else f'http://{server_ip}'
     log(f'The server is now serving requests at {server_url}.')
+
+def _reload_nginx():
+    # On an invalid configuration, a plain reload keeps the old one and only
+    # logs the error. Fail loudly instead, with nginx's message.
+    _run('nginx -t')
+    _run('nginx -s reload')
 
 def _make_sqlite_db_accessible():
     chown(SQLITE_DB_FILE, group_name=SERVICES_GROUP)
