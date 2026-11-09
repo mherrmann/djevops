@@ -14,7 +14,7 @@ from djevops.remote.actions import install_python_deps, migrate_db, \
     collect_static_files, get_django_setting, get_django_settings, \
     get_public_media_url
 from djevops.remote.nginx import get_header_name_from_meta_key, \
-    get_media_location, get_nginx_size_from_bytes
+    get_media_location
 from djevops.remote.scaffold import DJEVOPS_PYTHON, MANAGE_PY, REPO_DIR, \
     SERVICES_GROUP, get_deploy_config, get_hook_path, get_nginx_conf_path, \
     get_secrets
@@ -141,8 +141,8 @@ def main(manage_py_relpath):
                 django_user = user
                 django_env = env
             django_settings = get_django_settings([
-                'ADMINS', 'ALLOWED_HOSTS', 'DATA_UPLOAD_MAX_MEMORY_SIZE',
-                'SECURE_PROXY_SSL_HEADER', 'SERVER_EMAIL'
+                'ADMINS', 'ALLOWED_HOSTS', 'SECURE_PROXY_SSL_HEADER',
+                'SERVER_EMAIL'
             ], user, env)
             domains = [
                 host for host in django_settings['ALLOWED_HOSTS']
@@ -159,9 +159,6 @@ def main(manage_py_relpath):
                         admin_email = admin_email[1]
                     server_email = django_settings['SERVER_EMAIL']
             replacements = {
-                '$CLIENT_MAX_BODY_SIZE': get_nginx_size_from_bytes(
-                    django_settings['DATA_UPLOAD_MAX_MEMORY_SIZE']
-                ),
                 '$SERVER_NAME': ' '.join(domains) or server_ip,
                 '$SERVICE': service_name,
                 '$USER': user,

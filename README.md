@@ -322,8 +322,8 @@ your hooks must be able to re-run over the results of a previous execution.
 
 djevops puts nginx in front of your app. To add your own directives to its
 `server` block, create `deploy/nginx-web.conf`, where `web` is the name of your
-Django service in `deploy/djevops.yml`. For example, to allow large uploads on
-one URL only:
+Django service in `deploy/djevops.yml`. For example, nginx rejects request
+bodies larger than 1 MB by default. To allow large uploads on one URL only:
 
 ```
 location /upload/ {

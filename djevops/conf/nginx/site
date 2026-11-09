@@ -12,8 +12,6 @@ server {
     access_log /var/log/$SERVICE-access.log;
     error_log /var/log/$SERVICE-error.log;
 
-    client_max_body_size $CLIENT_MAX_BODY_SIZE;
-
     gzip on;
     # Let caches key on Accept-Encoding:
     gzip_vary on;
