@@ -3,3 +3,6 @@ $PROXY_SSL_HEADER
 proxy_set_header Host $host;
 proxy_redirect off;
 proxy_pass http://$SERVICE;
+# Use a large timeout. When Gunicorn's is shorter (which is typically the case)
+# then it wins.
+proxy_read_timeout 15m;
