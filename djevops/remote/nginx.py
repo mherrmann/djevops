@@ -1,3 +1,6 @@
+from djevops.remote.util import run as _run
+from time import monotonic, sleep
+
 # We forbid sniffing and sandbox uploaded files because they are untrusted: An
 # uploaded HTML or SVG file could run scripts with access to the site's origin.
 # This does not affect embedding the files, eg. via <img>.
@@ -40,3 +43,26 @@ def get_media_location(url, root):
         .replace('$URL', url) \
         .replace('$ROOT', root + '/') \
         .replace('$CSP', _MEDIA_CSP)
+
+def reload_nginx(timeout_secs=10):
+    # On an invalid configuration, a plain reload keeps the old one and only
+    # logs the error. Fail loudly instead, with nginx's message.
+    _run('nginx -t')
+    old_workers = _get_accepting_workers()
+    _run('nginx -s reload')
+    # The reload is asynchronous: Only once nginx has started new workers with
+    # the new configuration does it tell the old ones to stop accepting
+    # connections. Wait for that, so that requests after the deploy see the new
+    # configuration. Old workers may then still finish long requests.
+    deadline = monotonic() + timeout_secs
+    while old_workers & _get_accepting_workers():
+        if monotonic() > deadline:
+            raise TimeoutError('nginx did not apply the new configuration.')
+        sleep(0.1)
+
+def _get_accepting_workers():
+    # A worker that was told to stop renames itself to "nginx: worker process
+    # is shutting down". Run without a shell, so that pgrep does not match the
+    # shell's own command line.
+    pids = _run(['pgrep', '-f', 'nginx: worker process$'], ignore_errors=(1,))
+    return set((pids or '').split())

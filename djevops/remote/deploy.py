@@ -14,7 +14,7 @@ from djevops.remote.actions import install_python_deps, migrate_db, \
     collect_static_files, get_django_setting, get_django_settings, \
     get_public_media_url
 from djevops.remote.nginx import get_django_locations, \
-    get_header_name_from_meta_key, get_media_location
+    get_header_name_from_meta_key, get_media_location, reload_nginx
 from djevops.remote.scaffold import DJEVOPS_PYTHON, MANAGE_PY, REPO_DIR, \
     SERVICES_GROUP, get_deploy_config, get_hook_path, get_secrets
 from djevops.remote.util import chown, ensure_group_exists, run as _run, \
@@ -394,7 +394,7 @@ def main(manage_py_relpath):
     if any_service_failed:
         error('Some services failed to start. See logs above.')
 
-    _reload_nginx()
+    reload_nginx()
 
     symlink_force('/opt/djevops/bin/cronic', '/usr/bin/cronic')
     require(Crontab(cron_jobs, mailto=admin_email))
@@ -405,7 +405,7 @@ def main(manage_py_relpath):
 
     if registry.uninstall_unused():
         _run('supervisorctl update')
-        _reload_nginx()
+        reload_nginx()
 
     # Do this last because it can start an update, which may reboot the server:
     if os_update_timers_changed:
@@ -414,12 +414,6 @@ def main(manage_py_relpath):
     server_url = f'https://{primary_domain}' if primary_domain \
         else f'http://{server_ip}'
     log(f'The server is now serving requests at {server_url}.')
-
-def _reload_nginx():
-    # On an invalid configuration, a plain reload keeps the old one and only
-    # logs the error. Fail loudly instead, with nginx's message.
-    _run('nginx -t')
-    _run('nginx -s reload')
 
 def _make_sqlite_db_accessible():
     chown(SQLITE_DB_FILE, group_name=SERVICES_GROUP)
