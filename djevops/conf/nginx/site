@@ -36,4 +36,6 @@ server {
     location / {
         include /etc/nginx/includes/$SERVICE-django;
     }
+
+    $SERVER_CONF
 }

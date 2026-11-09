@@ -315,6 +315,24 @@ have changed since its last successful run. Because secrets sometimes do change,
 your hooks must be able to re-run over the results of a previous execution.
 </details>
 
+<details>
+<summary>Custom nginx configuration</summary>
+
+djevops puts nginx in front of your app. To add your own directives to its
+`server` block, create `deploy/nginx-web.conf`, where `web` is the name of your
+Django service in `deploy/djevops.yml`. For example, to allow large uploads on
+one URL only:
+
+```
+location /upload/ {
+    client_max_body_size 4G;
+    include /etc/nginx/includes/web-django;
+}
+```
+
+The `include` line passes requests on to your Django app.
+</details>
+
 ## Development
 
 Install the `test` dependencies from `pyproject.toml`. The easiest way I know

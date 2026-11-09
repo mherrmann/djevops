@@ -552,7 +552,9 @@ class NginxSite(Component):
 
 class TemplatedFile(Component):
 
-    def __init__(self, target, source, replacements):
+    def __init__(self, target, source, replacements=None):
+        if replacements is None:
+            replacements = {}
         super().__init__((source,))
         self.target = target
         self.source = source

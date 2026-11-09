@@ -482,6 +482,24 @@ class OnlineTest(SystemTest):
             pre_install.unlink()
             post_install.unlink()
 
+    def test_nginx_conf(self):
+        conf = Path('deploy/nginx-web.conf')
+        self.addCleanup(conf.unlink, missing_ok=True)
+        conf.write_text(
+            'location /big/ {\n'
+            '    client_max_body_size 4M;\n'
+            '    include /etc/nginx/includes/web-django;\n'
+            '}\n'
+        )
+        deploy(self.QUIET)
+        # The test app has no such URL, so Django answers 404. The point is that
+        # nginx let the body through to it.
+        self.assertEqual(404, self._http_post('big/', 3 * MB).status_code)
+        self.assertEqual(413, self._http_post('other/', 3 * MB).status_code)
+        conf.unlink()
+        deploy(self.QUIET)
+        self.assertEqual(413, self._http_post('big/', 3 * MB).status_code)
+
     def _write_hook(self, path, *lines):
         path.write_text('#!/bin/bash -e\n' + '\n'.join(lines))
         path.chmod(path.stat().st_mode | S_IXUSR)
@@ -559,6 +577,11 @@ class OnlineTest(SystemTest):
 
     def _http_get(self, path):
         return requests.get(f'http://{self.server_ip}/{path}')
+
+    def _http_post(self, path, num_bytes):
+        return requests.post(
+            f'http://{self.server_ip}/{path}', data=b'x' * num_bytes
+        )
 
     def _configure_sqlite(self):
         with self.update_deploy_yml() as deploy_yml:
