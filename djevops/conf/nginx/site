@@ -31,9 +31,7 @@ server {
 
     $MEDIA_LOCATION
 
-    location / {
-        include /etc/nginx/includes/$SERVICE-django;
-    }
+    $DJANGO_LOCATIONS
 
     $SERVER_CONF
 }

@@ -264,8 +264,19 @@ import os
 FILE_UPLOAD_TEMP_DIR = os.getenv('FILE_UPLOAD_TEMP_DIR')
 ```
 
-nginx also limits request bodies to 1 MB by default. See "Custom nginx
-configuration" below for raising this limit.
+nginx rejects request bodies larger than 1 MB by default, uploads included. To
+allow larger bodies on some URLs, add their prefixes and limits to your Django
+service in `deploy/djevops.yml`:
+
+```
+services:
+  web:
+    type: django
+    max-body-size:
+      /upload/: 4G
+```
+
+Use `/` as the prefix to raise the limit for the whole site.
 </details>
 
 <details>
@@ -339,17 +350,16 @@ your hooks must be able to re-run over the results of a previous execution.
 
 djevops puts nginx in front of your app. To add your own directives to its
 `server` block, create `deploy/nginx-web.conf`, where `web` is the name of your
-Django service in `deploy/djevops.yml`. For example, nginx rejects request
-bodies larger than 1 MB by default. To allow large uploads on one URL only:
+Django service in `deploy/djevops.yml`. For example, to redirect an old URL:
 
 ```
-location /upload/ {
-    client_max_body_size 4G;
-    include /etc/nginx/includes/web-django;
+location = /old-page {
+    return 301 /new-page;
 }
 ```
 
-The `include` line passes requests on to your Django app.
+Locations that should reach your Django app need the line
+`include /etc/nginx/includes/web-django;`.
 </details>
 
 ## Development

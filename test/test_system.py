@@ -473,20 +473,32 @@ class OnlineTest(SystemTest):
     def test_nginx_conf(self):
         conf = Path('deploy/nginx-web.conf')
         self.addCleanup(conf.unlink, missing_ok=True)
-        conf.write_text(
-            'location /big/ {\n'
-            '    client_max_body_size 4M;\n'
-            '    include /etc/nginx/includes/web-django;\n'
-            '}\n'
-        )
+        conf.write_text('location /custom/ {\n    return 200 "custom";\n}\n')
+        deploy(self.QUIET)
+        self._assert_http_text('custom/', 'custom')
+        conf.unlink()
+        deploy(self.QUIET)
+        self.assertEqual(404, self._http_get('custom/').status_code)
+
+    def test_max_body_size(self):
+        self.addCleanup(self._set_max_body_size, None)
+        self._set_max_body_size({'/big/': '4M'})
         deploy(self.QUIET)
         # The test app has no such URL, so Django answers 404. The point is that
         # nginx let the body through to it.
         self.assertEqual(404, self._http_post('big/', 3 * MB).status_code)
         self.assertEqual(413, self._http_post('other/', 3 * MB).status_code)
-        conf.unlink()
+        self._set_max_body_size({'/': '4M'})
         deploy(self.QUIET)
-        self.assertEqual(413, self._http_post('big/', 3 * MB).status_code)
+        self.assertEqual(404, self._http_post('other/', 3 * MB).status_code)
+
+    def _set_max_body_size(self, limits):
+        with self.update_deploy_yml() as deploy_yml:
+            web = deploy_yml['services']['web']
+            if limits is None:
+                web.pop('max-body-size', None)
+            else:
+                web['max-body-size'] = limits
 
     def _write_hook(self, path, *lines):
         path.write_text('#!/bin/bash -e\n' + '\n'.join(lines))

@@ -13,8 +13,8 @@ from djevops.remote import os_updates, postgres
 from djevops.remote.actions import install_python_deps, migrate_db, \
     collect_static_files, get_django_setting, get_django_settings, \
     get_public_media_url
-from djevops.remote.nginx import get_header_name_from_meta_key, \
-    get_media_location
+from djevops.remote.nginx import get_django_locations, \
+    get_header_name_from_meta_key, get_media_location
 from djevops.remote.scaffold import DJEVOPS_PYTHON, MANAGE_PY, REPO_DIR, \
     SERVICES_GROUP, get_deploy_config, get_hook_path, get_nginx_conf_path, \
     get_secrets
@@ -158,11 +158,14 @@ def main(manage_py_relpath):
                     if not isinstance(admin_email, str):
                         admin_email = admin_email[1]
                     server_email = django_settings['SERVER_EMAIL']
+            body_limits = service.get('max-body-size') or {}
             replacements = {
                 '$SERVER_NAME': ' '.join(domains) or server_ip,
                 '$SERVICE': service_name,
                 '$USER': user,
                 '$MEDIA_LOCATION': '',
+                '$DJANGO_LOCATIONS':
+                    get_django_locations(body_limits, service_name),
                 '$SERVER_CONF': '',
             }
             # Django keeps uploads in a temporary directory until the app

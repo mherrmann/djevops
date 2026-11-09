@@ -235,6 +235,19 @@ class OfflineTest(SystemTest):
             del deploy_yml['services']['web']['env']['clear']['MEDIA_ROOT']
 
         with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['services']['web']['max-body-size'] = '4G'
+        self.expect_deploy_error(
+            f"Please set `max-body-size` of service `web` in {config_path} "
+            "to a mapping of URL prefixes to sizes. For example:\n"
+            "    max-body-size:\n"
+            "      /upload/: 4G"
+        )
+        with self.update_deploy_yml() as deploy_yml:
+            deploy_yml['services']['web']['max-body-size'] = \
+                {'/upload/': '4G'}
+        expect_deploy_to_succeed()
+
+        with self.update_deploy_yml() as deploy_yml:
             deploy_yml['db'] = {'type': 'postgres'}
         self.expect_deploy_error(
             f"Please set DATABASES['default']['ENGINE'] in "

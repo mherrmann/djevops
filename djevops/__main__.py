@@ -304,6 +304,17 @@ def check_config(deploy_config, secrets):
             '        type: django'
         )
 
+    for service_name, service in deploy_config['services'].items():
+        body_limits = service.get('max-body-size')
+        if body_limits is not None and not isinstance(body_limits, dict):
+            raise CommandError(
+                f'Please set `max-body-size` of service `{service_name}` in '
+                f'{config_path} to a mapping of URL prefixes to sizes. For '
+                'example:\n'
+                '    max-body-size:\n'
+                '      /upload/: 4G'
+            )
+
     user_envs = get_services_users_envs(deploy_config, secrets)
     django_env = user_envs[django_service_name][1]
 
