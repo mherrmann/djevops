@@ -165,6 +165,20 @@ def main(manage_py_relpath):
                 '$MEDIA_LOCATION': '',
                 '$SERVER_CONF': '',
             }
+            # Django keeps uploads in a temporary directory until the app
+            # stores them. By default, that is /tmp, which Debian 13 mounts as
+            # a RAM disk. It is too small for large files, so give Django a
+            # directory on the normal disk instead. Files that a killed worker
+            # leaves behind there are removed by systemd-tmpfiles.
+            upload_temp_dir = env['FILE_UPLOAD_TEMP_DIR']
+            makedirs(upload_temp_dir, exist_ok=True)
+            chown(upload_temp_dir, group_name=SERVICES_GROUP)
+            chmod(upload_temp_dir, 0o2770)
+            require(TemplatedFile(
+                f'/etc/tmpfiles.d/{service_name}-uploads.conf',
+                '/opt/djevops/conf/tmpfiles/uploads',
+                {'$DIR': upload_temp_dir}
+            ))
             media_url = get_public_media_url(user, env)
             if media_url:
                 media_root = env['MEDIA_ROOT']

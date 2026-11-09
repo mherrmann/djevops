@@ -252,6 +252,23 @@ djevops does not back up uploaded files.
 </details>
 
 <details>
+<summary>File uploads</summary>
+
+Django keeps an upload in a temporary directory until your code stores it. On
+Debian 13, that directory is a RAM disk by default, so large uploads fail.
+djevops provides a directory on disk instead. To use it, add this to your Django
+settings:
+
+```
+import os
+FILE_UPLOAD_TEMP_DIR = os.getenv('FILE_UPLOAD_TEMP_DIR')
+```
+
+nginx also limits request bodies to 1 MB by default. See "Custom nginx
+configuration" below for raising this limit.
+</details>
+
+<details>
 <summary>Automatic OS updates</summary>
 
 djevops sets up automatic OS updates to keep your server up-to-date and secure.

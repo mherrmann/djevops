@@ -6,6 +6,7 @@ DEFAULT_ENV = {
     'SQLITE_DB_FILE': SQLITE_DB_FILE,
     'STATIC_ROOT': '/srv/static',
     'MEDIA_ROOT': '/srv/media',
+    'FILE_UPLOAD_TEMP_DIR': '/srv/uploads',
     'PATH': '/srv/venv/bin:' + _DEFAULT_PATH,
 }
 
