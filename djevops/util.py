@@ -61,6 +61,16 @@ def get_apt_install_cmd(*packages):
         f'{APT_GET} install -yqq {packages_str} >/dev/null 2>&1'
     )
 
+def get_apt_uninstall_cmd(package):
+    # As above, ask dpkg first because it is faster than apt-get and does not
+    # wait for apt's lock.
+    return (
+        f"if dpkg-query -W -f='${{Status}}' {package} 2>/dev/null | "
+        f"grep -q '^install ok installed$'; then "
+        f'DEBIAN_FRONTEND=noninteractive '
+        f'{APT_GET} purge -yqq {package} >/dev/null 2>&1; fi'
+    )
+
 def get_initial_apt_update_cmd():
     # New servers have no package lists. After that, the OS's timers keep them
     # up to date. We retry because the timers may be updating the lists at this

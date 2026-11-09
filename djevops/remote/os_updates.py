@@ -1,8 +1,12 @@
 from djevops.remote.components import AptPackage, TemplatedFile
 from djevops.remote.util import run as _run
+from djevops.util import get_apt_uninstall_cmd
 from os import makedirs
 
 def setup(require):
+    # Debian installs apt-listchanges by default. It emails root the NEWS
+    # entries of every package that unattended-upgrades installs.
+    _run(get_apt_uninstall_cmd('apt-listchanges'))
     require(AptPackage('unattended-upgrades'))
     # "always" makes apt act every time the timers below fire. Otherwise, it
     # acts at most once per day.

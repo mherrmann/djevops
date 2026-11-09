@@ -1,7 +1,8 @@
 from djevops.remote.scaffold import get_hook_path, get_uv_env
 from djevops.remote.util import chown, ensure_group_exists, \
     ensure_user_exists, run as _run, symlink_force
-from djevops.util import APT_GET, copy_with_replace, get_apt_install_cmd
+from djevops.util import APT_GET, copy_with_replace, get_apt_install_cmd, \
+    get_apt_uninstall_cmd
 from hashlib import sha256
 from os import chmod, makedirs, remove
 from os.path import exists, expanduser, join
@@ -47,7 +48,7 @@ class AptPackage(Component):
         _run(get_apt_install_cmd(self.name))
 
     def uninstall(self):
-        _run(f'{APT_GET} purge -yqq {self.name}')
+        _run(get_apt_uninstall_cmd(self.name))
 
     @property
     def key(self):
