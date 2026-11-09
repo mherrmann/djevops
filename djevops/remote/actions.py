@@ -10,7 +10,8 @@ MANAGE_SH = '/opt/djevops/bin/manage.sh'
 def install_python_deps():
     project_dir = get_django_project_dir()
     if exists(join(project_dir, 'pyproject.toml')):
-        cmd = 'UV_PROJECT_ENVIRONMENT=/srv/venv uv sync -q --no-install-project'
+        cmd = 'UV_PROJECT_ENVIRONMENT=/srv/venv uv sync -q --no-install-project ' \
+              '--no-dev'
     else:
         cmd = 'uv pip install -q --python /srv/venv/bin/python -r ' \
               'requirements.txt'
