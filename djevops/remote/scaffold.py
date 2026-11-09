@@ -57,11 +57,5 @@ def save_components(components):
 def get_hook_path(name):
     return join(STATE_DIR, name)
 
-def get_nginx_conf_name(service_name):
-    return f'nginx-{service_name}.conf'
-
-def get_nginx_conf_path(service_name):
-    return join(STATE_DIR, get_nginx_conf_name(service_name))
-
 def get_django_project_dir():
     return dirname(realpath(MANAGE_PY))

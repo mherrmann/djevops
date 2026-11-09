@@ -6,8 +6,7 @@ from djevops.config import get_backup_config, get_services_users_envs, \
 from djevops.litestream import get_litestream_config
 from djevops.remote.actions import MANAGE_SH
 from djevops.remote.scaffold import DEPLOY_CONFIG_PATH, HOOK_NAMES, \
-    SECRETS_PATH, STATE_DIR, get_hook_path, get_nginx_conf_name, \
-    get_nginx_conf_path
+    SECRETS_PATH, STATE_DIR, get_hook_path
 from djevops.util import git, get_apt_install_cmd, \
     get_initial_apt_update_cmd, prompt_yes_no, run_in_django_shell, \
     run_silently, walk_breadth_first
@@ -171,15 +170,9 @@ def deploy(quiet=False, dry_run=False):
     finally:
         remove(secrets_json.name)
 
-    deploy_files = [(name, get_hook_path(name)) for name in HOOK_NAMES]
-    for service_name, service in config['services'].items():
-        if service['type'] == 'django':
-            deploy_files.append((
-                get_nginx_conf_name(service_name),
-                get_nginx_conf_path(service_name)
-            ))
-    for name, remote_path in deploy_files:
-        local_path = get_deploy_path(name)
+    for hook_name in HOOK_NAMES:
+        local_path = get_deploy_path(hook_name)
+        remote_path = get_hook_path(hook_name)
         if exists(local_path):
             rsync('-a', local_path, f'root@{server}:{remote_path}')
         else:

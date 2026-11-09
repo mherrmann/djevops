@@ -470,16 +470,6 @@ class OnlineTest(SystemTest):
             pre_install.unlink()
             post_install.unlink()
 
-    def test_nginx_conf(self):
-        conf = Path('deploy/nginx-web.conf')
-        self.addCleanup(conf.unlink, missing_ok=True)
-        conf.write_text('location /custom/ {\n    return 200 "custom";\n}\n')
-        deploy(self.QUIET)
-        self._assert_http_text('custom/', 'custom')
-        conf.unlink()
-        deploy(self.QUIET)
-        self.assertEqual(404, self._http_get('custom/').status_code)
-
     def test_max_body_size(self):
         self.addCleanup(self._set_max_body_size, None)
         self._set_max_body_size({'/big/': '4M'})

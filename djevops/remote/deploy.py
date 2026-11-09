@@ -16,8 +16,7 @@ from djevops.remote.actions import install_python_deps, migrate_db, \
 from djevops.remote.nginx import get_django_locations, \
     get_header_name_from_meta_key, get_media_location
 from djevops.remote.scaffold import DJEVOPS_PYTHON, MANAGE_PY, REPO_DIR, \
-    SERVICES_GROUP, get_deploy_config, get_hook_path, get_nginx_conf_path, \
-    get_secrets
+    SERVICES_GROUP, get_deploy_config, get_hook_path, get_secrets
 from djevops.remote.util import chown, ensure_group_exists, run as _run, \
     symlink_force
 from djevops.util import is_domain, log, error
@@ -166,7 +165,6 @@ def main(manage_py_relpath):
                 '$MEDIA_LOCATION': '',
                 '$DJANGO_LOCATIONS':
                     get_django_locations(body_limits, service_name),
-                '$SERVER_CONF': '',
             }
             # Django keeps uploads in a temporary directory until the app
             # stores them. By default, that is /tmp, which Debian 13 mounts as
@@ -202,11 +200,6 @@ def main(manage_py_relpath):
                 '/opt/djevops/conf/nginx/django',
                 {'$SERVICE': service_name, '$PROXY_SSL_HEADER': proxy_ssl_header}
             ))
-            nginx_conf = get_nginx_conf_path(service_name)
-            if exists(nginx_conf):
-                nginx_include = f'/etc/nginx/includes/{service_name}-server'
-                require(TemplatedFile(nginx_include, nginx_conf))
-                replacements['$SERVER_CONF'] = f'include {nginx_include};'
             require(NginxSite(
                 service_name,
                 '/opt/djevops/conf/nginx/site',

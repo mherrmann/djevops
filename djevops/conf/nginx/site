@@ -32,6 +32,4 @@ server {
     $MEDIA_LOCATION
 
     $DJANGO_LOCATIONS
-
-    $SERVER_CONF
 }
