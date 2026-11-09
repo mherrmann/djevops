@@ -1,17 +1,33 @@
 from hcloud import Client as HetznerClient
 from hcloud._exceptions import APIException
 from hcloud.images import Image
+from hcloud.locations import Location
 from hcloud.server_types import ServerType
 
-def create_server(
-    api_token, ssh_key, name, server_type='cx23', image='debian-13'
-):
+# A location can be out of capacity for a server type for hours. Then try the
+# next combination.
+CANDIDATES = [
+    (server_type, location)
+    for server_type in ('cx23', 'cpx22')
+    for location in ('fsn1', 'nbg1', 'hel1')
+]
+
+def create_server(api_token, ssh_key, name, image='debian-13'):
     client = HetznerClient(token=api_token)
-    response = client.servers.create(
-        name=name, server_type=ServerType(name=server_type),
-        image=Image(name=image), ssh_keys=[ssh_key]
-    )
-    return response.server
+    for server_type, location in CANDIDATES:
+        try:
+            response = client.servers.create(
+                name=name, server_type=ServerType(name=server_type),
+                image=Image(name=image), ssh_keys=[ssh_key],
+                location=Location(name=location)
+            )
+        except APIException as e:
+            if e.code != 'resource_unavailable':
+                raise
+            error = e
+        else:
+            return response.server
+    raise error
 
 def ensure_ssh_key_exists(api_token, ssh_key_content, name):
     client = HetznerClient(token=api_token)
