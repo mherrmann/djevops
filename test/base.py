@@ -1,5 +1,6 @@
 from contextlib import contextmanager
-from djevops.__main__ import CommandError, init, deploy
+from djevops.__main__ import CommandError, init, deploy, get_deploy_dir, \
+    get_deploy_path
 from djevops.util import run_silently
 from unittest import TestCase
 from test.util import commit
@@ -41,10 +42,11 @@ class SystemTest(TestCase):
     @classmethod
     @contextmanager
     def update_deploy_yml(cls):
-        with open('deploy/djevops.yml') as f:
+        path = get_deploy_path('djevops.yml')
+        with open(path) as f:
             deploy_yml = yaml.safe_load(f)
         yield deploy_yml
-        with open('deploy/djevops.yml', 'w') as f:
+        with open(path, 'w') as f:
             f.write(yaml.dump(deploy_yml))
 
     @classmethod
@@ -55,7 +57,7 @@ class SystemTest(TestCase):
             commit(cls.SETTINGS_PY_RELPATH, 'Add to settings.py')
 
     def add_to_secrets(self, dict_):
-        with open('deploy/secrets.py', 'a') as f:
+        with open(get_deploy_path('secrets.py'), 'a') as f:
             for key, value in dict_.items():
                 f.write(f'{key} = {value!r}\n')
 

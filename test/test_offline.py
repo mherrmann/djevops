@@ -1,7 +1,8 @@
 from contextlib import chdir
-from djevops.__main__ import init, deploy
+from djevops.__main__ import init, deploy, get_deploy_dir
 from djevops.util import git
-from os import makedirs, remove
+from os import makedirs, remove, rename
+from os.path import join, normpath
 from test.base import SystemTest
 from test.util import cd_to_temp_dir, write_pyproject_toml, \
     add_dep_to_pyproject_toml, write_requirements_txt
@@ -13,6 +14,7 @@ class OfflineTest(SystemTest):
     def setUp(self):
         super().setUp()
         self.restore_cwd_fn = cd_to_temp_dir()
+        get_deploy_dir.cache_clear()
 
     def tearDown(self):
         self.restore_cwd_fn()
@@ -99,10 +101,25 @@ class OfflineTest(SystemTest):
             remove(path)
 
     def test_deploy(self):
+        self._test_deploy('deploy')
+
+    def test_deploy_with_files_in_subdirectory(self):
+        self._test_deploy('deploy/vps')
+
+    def test_deploy_with_files_next_to_manage_py(self):
+        self._test_deploy('.')
+
+    def _test_deploy(self, deploy_dir):
         self.test_init()
+        if deploy_dir != 'deploy':
+            makedirs(deploy_dir, exist_ok=True)
+            for name in ('djevops.yml', 'secrets.py'):
+                rename(join('deploy', name), join(deploy_dir, name))
+            get_deploy_dir.cache_clear()
+        config_path = normpath(join(deploy_dir, 'djevops.yml'))
 
         self.expect_deploy_error(
-            "Please set your server's IP address in deploy/djevops.yml. For "
+            f"Please set your server's IP address in {config_path}. For "
             "example:\n"
             "    server: 1.2.3.4"
         )
@@ -116,7 +133,7 @@ class OfflineTest(SystemTest):
             f'For example, in {self.SETTINGS_PY_RELPATH}:\n\n'
             '    import os\n'
             '    ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split()\n\n'
-            f'And in deploy/djevops.yml:\n\n'
+            f'And in {config_path}:\n\n'
             '    services:\n'
             '      web:\n'
             '        type: django\n'
@@ -163,7 +180,7 @@ class OfflineTest(SystemTest):
             deploy_yml['db'] = None
 
         self.expect_deploy_error(
-            "Please remove the `db` section in deploy/djevops.yml or set its "
+            f"Please remove the `db` section in {config_path} or set its "
             "`type` key to `sqlite` or `postgres`. For example:\n"
             "    db:\n"
             "      type: sqlite"
@@ -210,7 +227,7 @@ class OfflineTest(SystemTest):
 
         self.expect_deploy_error(
             "Please remove the trailing slash from MEDIA_ROOT in "
-            "deploy/djevops.yml.\n\n"
+            f"{config_path}.\n\n"
             "Don't forget to commit *and push* your changes to Git."
         )
 

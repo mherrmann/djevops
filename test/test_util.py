@@ -1,4 +1,6 @@
-from djevops.util import is_domain, run_in_django_shell
+from contextlib import chdir
+from djevops.util import is_domain, run_in_django_shell, walk_breadth_first
+from os import makedirs
 from os.path import join
 from subprocess import CalledProcessError
 from tempfile import TemporaryDirectory
@@ -46,3 +48,13 @@ class RunInDjangoShellTest(TestCase):
             with open(manage_py, 'w') as f:
                 f.write(manage_py_contents)
             return run_in_django_shell(cmds, manage_py=manage_py)
+
+class WalkBreadthFirstTest(TestCase):
+    def test_order(self):
+        with TemporaryDirectory() as temp_dir, chdir(temp_dir):
+            for path in ('b/d', 'a/c', '.hidden', 'a/.hidden'):
+                makedirs(path)
+            self.assertEqual(
+                ['.', 'a', 'b', join('a', 'c'), join('b', 'd')],
+                list(walk_breadth_first('.'))
+            )

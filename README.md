@@ -40,7 +40,9 @@ mail:
 ```
 
 Secrets such as `DJANGO_SECRET_KEY` or `SMTP_PASSWORD` can be specified as
-constants in file `deploy/secrets.py`.
+constants in file `deploy/secrets.py`. If you prefer, djevops' files can also
+lie next to `manage.py` or in any subdirectory next to it, such as
+`deploy/vps/`.
 
 Most config values are optional. Fill in the ones you want and run
 `djevops deploy`. djevops then clones your Git repo on the `server` and starts

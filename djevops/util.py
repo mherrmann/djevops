@@ -1,5 +1,8 @@
-from ipaddress import ip_address
+from collections import deque
 from datetime import datetime
+from ipaddress import ip_address
+from os import scandir
+from os.path import join
 from subprocess import run, PIPE, CalledProcessError
 
 import re
@@ -86,6 +89,18 @@ def prompt_yes_no(question):
             return False
         else:
             print('Please answer y or n.')
+
+def walk_breadth_first(root):
+    queue = deque([root])
+    while queue:
+        dir_path = queue.popleft()
+        yield dir_path
+        for entry in sorted(scandir(dir_path), key=lambda e: e.name):
+            is_hidden = entry.name.startswith('.')
+            if not is_hidden and entry.is_dir(follow_symlinks=False):
+                queue.append(
+                    entry.name if dir_path == '.' else join(dir_path, entry.name)
+                )
 
 def log(message):
     _log(message, TERMINAL_COLOR_SUCCESS)

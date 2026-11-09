@@ -9,10 +9,11 @@ from djevops.remote.scaffold import DEPLOY_CONFIG_PATH, HOOK_NAMES, \
     SECRETS_PATH, STATE_DIR, get_hook_path, get_nginx_conf_name, \
     get_nginx_conf_path
 from djevops.util import git, get_apt_install_cmd, \
-    get_initial_apt_update_cmd, prompt_yes_no, run_in_django_shell, run_silently
-from functools import partial
+    get_initial_apt_update_cmd, prompt_yes_no, run_in_django_shell, \
+    run_silently, walk_breadth_first
+from functools import cache, partial
 from os import access, makedirs, remove
-from os.path import basename, dirname, exists, expanduser, join
+from os.path import basename, dirname, exists, expanduser, join, normpath
 from runpy import run_path
 from shlex import quote, split
 from shutil import which
@@ -270,7 +271,17 @@ def load_config():
     return config, secrets
 
 def get_deploy_path(name):
-    return join('deploy', name)
+    # normpath turns ./djevops.yml into djevops.yml for error messages.
+    return normpath(join(get_deploy_dir(), name))
+
+@cache
+def get_deploy_dir():
+    # djevops' files lie next to manage.py or in any subdirectory. Take the
+    # first directory, breadth-first, that has a djevops.yml.
+    for dir_path in walk_breadth_first('.'):
+        if exists(join(dir_path, 'djevops.yml')):
+            return dir_path
+    return 'deploy'
 
 def check_config(deploy_config, secrets):
     config_path = get_deploy_path('djevops.yml')
