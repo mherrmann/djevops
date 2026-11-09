@@ -108,17 +108,19 @@ def init(quiet=False):
             }
         }
     }
-    for path in ('deploy/djevops.yml', 'deploy/secrets.py'):
+    config_path = get_deploy_path('djevops.yml')
+    secrets_path = get_deploy_path('secrets.py')
+    for path in (config_path, secrets_path):
         if exists(path):
             raise CommandError(f'{path} already exists.')
-    makedirs('deploy', exist_ok=True)
-    with open('deploy/djevops.yml', 'w') as f:
+    makedirs(dirname(config_path), exist_ok=True)
+    with open(config_path, 'w') as f:
         f.write(yaml.dump(deploy_yml, sort_keys=False))
-    with open('deploy/secrets.py', 'w') as f:
+    with open(secrets_path, 'w') as f:
         f.write(SAMPLE_SECRETS_PY)
     if not quiet:
-        print('Created deploy/djevops.yml')
-        print('Created deploy/secrets.py')
+        print(f'Created {config_path}')
+        print(f'Created {secrets_path}')
         print(f'To deploy your Django app to a server, run: djevops deploy')
 
 def _ensure_is_in_git_repo():
@@ -155,7 +157,10 @@ def deploy(quiet=False, dry_run=False):
     server = config['server']
     install_djevops_on_server('root', server, quiet)
     ssh('root', server, f'mkdir -p {STATE_DIR}', quiet)
-    rsync('-a', 'deploy/djevops.yml', f'root@{server}:{DEPLOY_CONFIG_PATH}')
+    rsync(
+        '-a', get_deploy_path('djevops.yml'),
+        f'root@{server}:{DEPLOY_CONFIG_PATH}'
+    )
 
     secrets_json = NamedTemporaryFile(mode='w', delete=False, suffix='.json')
     json.dump(secrets, secrets_json, indent=2, sort_keys=True)
@@ -173,7 +178,7 @@ def deploy(quiet=False, dry_run=False):
                 get_nginx_conf_path(service_name)
             ))
     for name, remote_path in deploy_files:
-        local_path = f'deploy/{name}'
+        local_path = get_deploy_path(name)
         if exists(local_path):
             rsync('-a', local_path, f'root@{server}:{remote_path}')
         else:
@@ -187,15 +192,16 @@ def deploy(quiet=False, dry_run=False):
 
 def getbackup(quiet=False, force=False):
     config, secrets = load_config()
+    config_path = get_deploy_path('djevops.yml')
     db_type = (config.get('db') or {}).get('type')
     if not db_type:
         raise CommandError(
-            "The `db` section in deploy/djevops.yml is not configured."
+            f"The `db` section in {config_path} is not configured."
         )
     backup_config = get_backup_config(config, secrets)
     if not backup_config:
         raise CommandError(
-            "The `backup` section in the `db` section in deploy/djevops.yml "
+            f"The `backup` section in the `db` section in {config_path} "
             "is not configured."
         )
     if db_type == 'sqlite':
@@ -206,7 +212,7 @@ def getbackup(quiet=False, force=False):
         except KeyError:
             raise CommandError(
                 "The `path` key is not set in the `backup` section in the "
-                "`db` section in deploy/djevops.yml. For example:\n"
+                f"`db` section in {config_path}. For example:\n"
                 "    db:\n"
                 "      backup:\n"
                 "        path: db.sql"
@@ -250,23 +256,28 @@ def shell():
     try:
         django_service_name, _ = get_django_service(config)
     except LookupError:
-        raise CommandError('No Django service found in deploy/djevops.yml')
+        config_path = get_deploy_path('djevops.yml')
+        raise CommandError(f'No Django service found in {config_path}')
     server = config['server']
     su_cmd = f'su - {django_service_name} -c {quote(MANAGE_SH + " shell")}'
     ssh_cmd = get_ssh_command()
     run(f'{ssh_cmd} -t root@{server} {quote(su_cmd)}', shell=True)
 
 def load_config():
-    with open('deploy/djevops.yml') as f:
+    with open(get_deploy_path('djevops.yml')) as f:
         config = yaml.safe_load(f)
-    secrets = get_secrets('deploy/secrets.py')
+    secrets = get_secrets(get_deploy_path('secrets.py'))
     return config, secrets
 
+def get_deploy_path(name):
+    return join('deploy', name)
+
 def check_config(deploy_config, secrets):
+    config_path = get_deploy_path('djevops.yml')
     server_ip = deploy_config.get('server')
     if not server_ip or server_ip == SAMPLE_SERVER_IP:
         raise CommandError(
-            "Please set your server's IP address in deploy/djevops.yml. For "
+            f"Please set your server's IP address in {config_path}. For "
             "example:\n"
             "    server: 1.2.3.4"
         )
@@ -276,7 +287,7 @@ def check_config(deploy_config, secrets):
     except LookupError:
         raise CommandError(
             'Please add at least one service of type `django` to '
-            'deploy/djevops.yml. For example:\n'
+            f'{config_path}. For example:\n'
             '    services:\n'
             '      web:\n'
             '        type: django'
@@ -290,7 +301,7 @@ def check_config(deploy_config, secrets):
         db_type = db.get('type')
         if db_type not in ('sqlite', 'postgres'):
             raise CommandError(
-                'Please remove the `db` section in deploy/djevops.yml or set '
+                f'Please remove the `db` section in {config_path} or set '
                 'its `type` key to `sqlite` or `postgres`. For example:\n'
                 '    db:\n'
                 '      type: sqlite'
@@ -320,13 +331,14 @@ def check_config(deploy_config, secrets):
     django_shell_env = django_env | {'PYTHONPATH': ':'.join(sys.path)}
     error_msg = run_in_django_shell([
         'from djevops.check_django_settings import main',
-        f'main({server_ip!r}, {db_type!r}, {mail_configured!r})',
+        f'main({server_ip!r}, {db_type!r}, {mail_configured!r}, '
+        f'{config_path!r})',
     ], env=django_shell_env)
     if error_msg:
         raise CommandError(error_msg)
 
     for hook_name in HOOK_NAMES:
-        hook = f'deploy/{hook_name}'
+        hook = get_deploy_path(hook_name)
         if exists(hook) and not access(hook, os.X_OK):
             raise CommandError(
                 f'Please make {hook} executable:\n'

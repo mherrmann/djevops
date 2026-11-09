@@ -9,12 +9,12 @@ import sys
 
 SETTINGS_PY = settings.SETTINGS_MODULE.replace('.', '/') + '.py'
 
-def main(server_ip, db_type, mail_configured):
-    check_allowed_hosts(server_ip)
+def main(server_ip, db_type, mail_configured, config_path):
+    check_allowed_hosts(server_ip, config_path)
     check_staticfiles()
     if db_type:
         check_databases(db_type)
-    check_media()
+    check_media(config_path)
     if mail_configured:
         check_server_email()
 
@@ -30,7 +30,7 @@ def check_staticfiles():
                 '    STATIC_ROOT = os.getenv("STATIC_ROOT")'
             )
 
-def check_allowed_hosts(server_ip):
+def check_allowed_hosts(server_ip, config_path):
     if not settings.ALLOWED_HOSTS:
         error(
             'Please set Django setting ALLOWED_HOSTS to the list of host names '
@@ -38,7 +38,7 @@ def check_allowed_hosts(server_ip):
             f'example, in {SETTINGS_PY}:\n\n'
             '    import os\n'
             '    ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split()\n\n'
-            'And in deploy/djevops.yml:\n\n'
+            f'And in {config_path}:\n\n'
             '    services:\n'
             '      web:\n'
             '        type: django\n'
@@ -76,7 +76,7 @@ def check_sqlite():
             "    os.getenv('SQLITE_DB_FILE') or <what you had before>"
         )
 
-def check_media():
+def check_media(config_path):
     media_url = get_public_media_url()
     if not media_url:
         return
@@ -84,7 +84,7 @@ def check_media():
     if media_root.endswith('/'):
         error(
             'Please remove the trailing slash from MEDIA_ROOT in '
-            'deploy/djevops.yml.'
+            f'{config_path}.'
         )
     if default_storage.location != media_root:
         error(
